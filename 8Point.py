@@ -136,6 +136,9 @@ print(E)
 #-----------------Recover Rotation and Translation-----------------#
 # https://www-users.cse.umn.edu/~hspark/CSci5980/nister.pdf
 
+# There is ambiguity in finding which of R1 and R2 or t1 and t2 is the correct solution
+# Need to add in checks to determine the correct solution
+
 U, S, Vt = np.linalg.svd(E)
 
 if np.linalg.det(U) < 0:
