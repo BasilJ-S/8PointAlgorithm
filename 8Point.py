@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 MIN_MATCH_COUNT = 10
 #-----------------Read Images-----------------#
 
-im1 = cv2.imread('IMG_3125.jpeg')
+im1 = cv2.imread('IMG_3127.jpeg')
 im2 = cv2.imread('IMG_3126.jpeg')
 im3 = cv2.imread('IMG_3127.jpeg')
 
@@ -17,95 +17,113 @@ im3_gray = cv2.cvtColor(im3, cv2.COLOR_BGR2GRAY)
 
 #-----------------Find SIFT Keypoints and Match with RANSAC-----------------#
 
-# Find the SIFT key points and descriptors in the two images
-sift = cv2.SIFT_create()
-kp1, des1 = sift.detectAndCompute(im1_gray, None)
-kp2, des2 = sift.detectAndCompute(im2_gray, None)
-kp3, des3 = sift.detectAndCompute(im3_gray, None)
+def find_sift_keypoints_and_descriptors(image_gray):
+    sift = cv2.SIFT_create()
+    keypoints, descriptors = sift.detectAndCompute(image_gray, None)
+    return keypoints, descriptors
 
-# BFMatcher with default params
-bf = cv2.BFMatcher()
-matches = bf.knnMatch(des1,des2,k=2)
- 
-# Apply ratio test
-good = []
-for m,n in matches:
-    if m.distance < 0.75*n.distance:
-        good.append(m)
- 
-# cv2.drawMatchesKnn expects list of lists as matches.
-#matchImage = cv2.drawMatchesKnn(im1_gray,kp1,im2_gray,kp2,good,None,flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
-#plt.imshow(matchImage),plt.show()
+def match_keypoints(des1, des2):
+    bf = cv2.BFMatcher()
+    matches = bf.knnMatch(des1, des2, k=2)
+    good_matches = []
+    for m, n in matches:
+        if m.distance < 0.75 * n.distance:
+            good_matches.append(m)
+    return good_matches
 
+def find_homography_and_draw_matches(im1_gray, im2_gray, kp1, kp2, good_matches):
+    if len(good_matches) > MIN_MATCH_COUNT:
+        src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+        dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+        matchesMask = mask.ravel().tolist()
+        h, w = im1_gray.shape
+        pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
+        dst = cv2.perspectiveTransform(pts, M)
+        img2 = cv2.polylines(im2_gray, [np.int32(dst)], True, 255, 3, cv2.LINE_AA)
+    else:
+        print("Not enough matches are found - {}/{}".format(len(good_matches), MIN_MATCH_COUNT))
+        matchesMask = None
 
-if len(good)>MIN_MATCH_COUNT:
-    src_pts = np.float32([ kp1[m.queryIdx].pt for m in good ]).reshape(-1,1,2)
-    dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good ]).reshape(-1,1,2)
-    M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,5.0)
-    matchesMask = mask.ravel().tolist()
-    h,w = im1_gray.shape
-    pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
-    dst = cv2.perspectiveTransform(pts,M)
-    img2 = cv2.polylines(im2_gray,[np.int32(dst)],True,255,3, cv2.LINE_AA)
-else:
-    print( "Not enough matches are found - {}/{}".format(len(good), MIN_MATCH_COUNT) )
-    matchesMask = None
+    draw_params = dict(matchColor=(0, 255, 0),  # draw matches in green color
+                       singlePointColor=None,
+                       matchesMask=matchesMask,  # draw only inliers
+                       flags=2)
 
-draw_params = dict(matchColor = (0,255,0), # draw matches in green color
-                   singlePointColor = None,
-                   matchesMask = matchesMask, # draw only inliers
-                   flags = 2)
+    img3 = cv2.drawMatches(im1_gray, kp1, im2_gray, kp2, good_matches, None, **draw_params)
+    return img3
 
-img3 = cv2.drawMatches(im1_gray,kp1,im2_gray,kp2,good,None,**draw_params)
-# Enable interactive mode
-plt.ion()
+# Function to find good matching points between two images
+def find_good_matching_points(im1_gray, im2_gray):
+    # Find the SIFT key points and descriptors in the two images
+    kp1, des1 = find_sift_keypoints_and_descriptors(im1_gray)
+    kp2, des2 = find_sift_keypoints_and_descriptors(im2_gray)
 
-# Show the matches image
-plt.figure()
-plt.imshow(img3, 'gray')
-plt.show()
-plt.ioff()
+    # Match keypoints
+    good = match_keypoints(des1, des2)
+
+    # Find homography and draw matches
+    img3 = find_homography_and_draw_matches(im1_gray, im2_gray, kp1, kp2, good)
+
+    # Enable interactive mode
+    plt.ion()
+
+    # Show the matches image
+    plt.figure()
+    plt.imshow(img3, 'gray')
+    plt.show()
+    plt.ioff()
+
+    # Extract points from the good matches
+    pts1 = np.float32([kp1[m.queryIdx].pt for m in good])
+    pts2 = np.float32([kp2[m.trainIdx].pt for m in good])
+
+    return pts1, pts2
+
+pts1, pts2 = find_good_matching_points(im1_gray, im2_gray)
+
 #-----------------Compute Fundamental Matrix-----------------#
 
-# Extract points from the good matches
-pts1 = np.float32([kp1[m.queryIdx].pt for m in good])
-pts2 = np.float32([kp2[m.trainIdx].pt for m in good])
+def compute_fundamental_matrix(pts1, pts2):
 
-# Normalize points
-pts1_mean = np.mean(pts1, axis=0)
-pts2_mean = np.mean(pts2, axis=0)
-pts1_std = np.std(pts1)
-pts2_std = np.std(pts2)
+    # Normalize points
+    pts1_mean = np.mean(pts1, axis=0)
+    pts2_mean = np.mean(pts2, axis=0)
+    pts1_std = np.std(pts1)
+    pts2_std = np.std(pts2)
 
-T1 = np.array([[1/pts1_std, 0, -pts1_mean[0]/pts1_std],
-               [0, 1/pts1_std, -pts1_mean[1]/pts1_std],
-               [0, 0, 1]])
+    T1 = np.array([[1/pts1_std, 0, -pts1_mean[0]/pts1_std],
+                [0, 1/pts1_std, -pts1_mean[1]/pts1_std],
+                [0, 0, 1]])
 
-T2 = np.array([[1/pts2_std, 0, -pts2_mean[0]/pts2_std],
-               [0, 1/pts2_std, -pts2_mean[1]/pts2_std],
-               [0, 0, 1]])
+    T2 = np.array([[1/pts2_std, 0, -pts2_mean[0]/pts2_std],
+                [0, 1/pts2_std, -pts2_mean[1]/pts2_std],
+                [0, 0, 1]])
 
-pts1_normalized = np.dot(T1, np.vstack((pts1.T, np.ones((1, pts1.shape[0])))))
-pts2_normalized = np.dot(T2, np.vstack((pts2.T, np.ones((1, pts2.shape[0])))))
+    pts1_normalized = np.dot(T1, np.vstack((pts1.T, np.ones((1, pts1.shape[0])))))
+    pts2_normalized = np.dot(T2, np.vstack((pts2.T, np.ones((1, pts2.shape[0])))))
 
-# Construct matrix A for the normalized points
-A = np.zeros((len(good), 9))
-for i in range(len(good)):
-    x1, y1 = pts1_normalized[0, i], pts1_normalized[1, i]
-    x2, y2 = pts2_normalized[0, i], pts2_normalized[1, i]
-    A[i] = [x1*x2, x1*y2, x1, y1*x2, y1*y2, y1, x2, y2, 1]
+    # Construct matrix A for the normalized points
+    A = np.zeros((len(pts1), 9))
+    for i in range(len(pts1)):
+        x1, y1 = pts1_normalized[0, i], pts1_normalized[1, i]
+        x2, y2 = pts2_normalized[0, i], pts2_normalized[1, i]
+        A[i] = [x1*x2, x1*y2, x1, y1*x2, y1*y2, y1, x2, y2, 1]
 
-# Compute the fundamental matrix using SVD
-U, S, Vt = np.linalg.svd(A)
-F_normalized = Vt[-1].reshape(3, 3)
+    # Compute the fundamental matrix using SVD
+    U, S, Vt = np.linalg.svd(A)
+    F_normalized = Vt[-1].reshape(3, 3)
 
-# Enforce rank-2 constraint on F
-U, S, Vt = np.linalg.svd(F_normalized)
-S[2] = 0
-F_normalized = np.dot(U, np.dot(np.diag(S), Vt))
+    # Enforce rank-2 constraint on F
+    U, S, Vt = np.linalg.svd(F_normalized)
+    S[2] = 0
+    F_normalized = np.dot(U, np.dot(np.diag(S), Vt))
 
-# Denormalize the fundamental matrix
-F = np.dot(T2.T, np.dot(F_normalized, T1))
+    # Denormalize the fundamental matrix
+    F = np.dot(T2.T, np.dot(F_normalized, T1))
+    return F
+
+F = compute_fundamental_matrix(pts1, pts2)
 
 print("Fundamental Matrix F:")
 print(F)
@@ -126,9 +144,12 @@ K = np.array([[fm, 0, cx],
               [0, fm, cy],
               [0, 0, 1]])
 
-inverseK = np.linalg.inv(K)
+def compute_essential_matrix(F, K):
+    E = np.matmul(np.matmul(K.T, F), K)
+    return E
 
-E = np.matmul(np.matmul(K.T, F), K)
+E = compute_essential_matrix(F, K)
+
 print("Essential Matrix E:")
 print(E)
 
