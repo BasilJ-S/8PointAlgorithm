@@ -44,11 +44,10 @@ def find_homography_and_draw_matches(im1_gray, im2_gray, kp1, kp2, good_matches)
                        matchesMask=matchesMask,  # draw only inliers
                        flags=2)
     
-    img3 = cv2.drawMatches(im1_gray, kp1, im2_gray, kp2, good_matches, None, **draw_params)
     inlier_pts1 = np.float32([kp1[m.queryIdx].pt for i, m in enumerate(good_matches) if matchesMask[i]])
     inlier_pts2 = np.float32([kp2[m.trainIdx].pt for i, m in enumerate(good_matches) if matchesMask[i]])
     
-    return img3, inlier_pts1, inlier_pts2
+    return inlier_pts1, inlier_pts2
 
 # Function to find inlier matching points between two images
 def find_inlier_matching_points(im1_gray, im2_gray):
@@ -60,18 +59,28 @@ def find_inlier_matching_points(im1_gray, im2_gray):
     good = match_descriptors(des1, des2)
 
     # Find homography and draw matches
-    img3, inlier_pts1, inlier_pts2 = find_homography_and_draw_matches(im1_gray, im2_gray, kp1, kp2, good)
+    inlier_pts1, inlier_pts2 = find_homography_and_draw_matches(im1_gray, im2_gray, kp1, kp2, good)
 
-    # Enable interactive mode
-    plt.ion()
+    return inlier_pts1, inlier_pts2
+
+# Plot two images side by side with matches shown
+def plot_two_images_with_matches(im1, im2, inlier_pts1, inlier_pts2):
+    # Convert grayscale images to BGR so that we can draw colored lines
+    im1_color = cv2.cvtColor(im1, cv2.COLOR_GRAY2BGR)
+    im2_color = cv2.cvtColor(im2, cv2.COLOR_GRAY2BGR)
+
+    img3 = np.hstack((im1_color, im2_color))
+    for pt1, pt2 in zip(inlier_pts1, inlier_pts2):
+        pt2 = (pt2[0] + im1.shape[1], pt2[1])
+        cv2.line(img3, tuple(map(int, pt1)), tuple(map(int, pt2)), (0, 255, 0), 1)
+        cv2.circle(img3, tuple(map(int, pt1)), 5, (0, 0, 255), -1)
+        cv2.circle(img3, tuple(map(int, pt2)), 5, (0, 0, 255), -1)
+
 
     # Show the matches image
     plt.figure()
-    plt.imshow(img3, 'gray')
+    plt.imshow(cv2.cvtColor(img3, cv2.COLOR_BGR2RGB))
     plt.show()
-    plt.ioff()
-
-    return inlier_pts1, inlier_pts2
 
 #-----------------Compute Fundamental Matrix-----------------#
 
@@ -122,7 +131,112 @@ def compute_essential_matrix(F, K):
     E = np.matmul(np.matmul(K.T, F), K)
     return E
 
-#-----------------Read Images-----------------#
+#-----------------Recover Rotation and Translation-----------------#
+# https://www-users.cse.umn.edu/~hspark/CSci5980/nister.pdf
+
+# There is ambiguity in finding which of R1 and R2 or t1 and t2 is the correct solution
+# Need to add in checks to determine the correct solution
+
+# function to recover all valid R and t values from essential matrix E
+def recover_rotation_translation(E):
+    U, S, Vt = np.linalg.svd(E)
+
+    if np.linalg.det(U) < 0:
+        U = -U
+    if np.linalg.det(Vt) < 0:
+        Vt = -Vt
+
+    D = np.array([[0, 1, 0], [-1, 0, 0], [0, 0, 1]])
+    R1 = np.dot(np.dot(U, D), Vt)
+    R2 = np.dot(np.dot(U, D.T), Vt)
+    t1 = U[:, 2]
+    t2 = -U[:, 2]
+
+    return R1, R2, t1, t2
+
+
+# Disambiguate rotation and translation based on valid points and intrinsics
+def disambiguate_rotation_translation(R1, R2, t1, t2, pts1, pts2, K):
+    P1 = np.hstack((np.eye(3), np.zeros((3, 1))))
+    P2_candidates = [
+        np.hstack((R1, t1.reshape(-1, 1))),
+        np.hstack((R1, t2.reshape(-1, 1))),
+        np.hstack((R2, t1.reshape(-1, 1))),
+        np.hstack((R2, t2.reshape(-1, 1))),
+    ]
+
+    max_valid_points_count = 0
+    threshold = 10
+    bestR = None
+    bestT = None
+    for i, P2 in enumerate(P2_candidates):
+        points_4d_hom = cv2.triangulatePoints(P1, P2, pts1.T, pts2.T)
+        points_3d = points_4d_hom[:3] / points_4d_hom[3]
+
+        in_front_of_cam1 = points_3d[2, :] > 0
+        in_front_of_cam2 = (P2 @ np.vstack((points_3d, np.ones((1, points_3d.shape[1])))))[2, :] > 0
+
+        valid_points_count = np.sum(in_front_of_cam1 & in_front_of_cam2)
+
+        if valid_points_count > threshold and valid_points_count > max_valid_points_count:
+            print(f"Correct solution: R = {P2[:, :3]}, t = {P2[:, 3]}, valid points count = {valid_points_count}")
+            max_valid_points_count = valid_points_count
+            bestR = P2[:, :3]
+            bestT = P2[:, 3]
+
+    return bestR, bestT
+
+# Function to compute camera rotation and translation from two images
+def compute_rotation_translation(im1_gray, im2_gray, K):
+    # Find inlier matching points
+    pts1, pts2 = find_inlier_matching_points(im1_gray, im2_gray)
+
+    # Plot the inlier matching points
+    plot_two_images_with_matches(im1_gray, im2_gray, pts1, pts2)
+
+    # Compute fundamental matrix
+    F = compute_fundamental_matrix(pts1, pts2)
+
+    # Compute essential matrix
+    E = compute_essential_matrix(F, K)
+
+    # Recover rotation and translation
+    R1, R2, t1, t2 = recover_rotation_translation(E)
+
+    # Disambiguate rotation and translation
+    R, t = disambiguate_rotation_translation(R1, R2, t1, t2, pts1, pts2, K)
+
+    return R,t
+
+# Display the movement of the camera in 3D space from an array of translation matrices
+def display_camera_movement(t_list):
+    # Enable interactive mode
+    # Create a 3D plot
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Plot the origin
+    ax.scatter(0, 0, 0, color='r')
+    ax.text(0, 0, 0, "Camera 1")
+
+    # Initialize the current displacement
+    current_displacement = np.zeros(3)
+
+    # Plot the camera positions
+    for i, t in enumerate(t_list):
+        current_displacement += t
+        ax.scatter(current_displacement[0], current_displacement[1], current_displacement[2], color='b')
+        ax.text(current_displacement[0], current_displacement[1], current_displacement[2], f"Camera {i+2}")
+
+    # Set the axes limits
+    ax.set_xlim([-2, 2])
+    ax.set_ylim([-2, 2])
+    ax.set_zlim([-2, 2])
+
+    # Show the plot
+    plt.show()
+
+#-----------------Main Code-----------------#
 
 im1 = cv2.imread('IMG_3125.jpeg')
 im2 = cv2.imread('IMG_3126.jpeg')
@@ -132,16 +246,6 @@ im3 = cv2.imread('IMG_3127.jpeg')
 im1_gray = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
 im2_gray = cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
 im3_gray = cv2.cvtColor(im3, cv2.COLOR_BGR2GRAY)
-
-pts1, pts2 = find_inlier_matching_points(im1_gray, im2_gray)
-pts3,pts4 = find_inlier_matching_points(im2_gray,im3_gray)
-
-F = compute_fundamental_matrix(pts1, pts2)
-
-print("Fundamental Matrix F:")
-print(F)
-
-
 
 # Retrieved from photo metadata for iPhone 13
 focal = 5.1
@@ -158,47 +262,37 @@ K = np.array([[fm, 0, cx],
               [0, 0, 1]])
 
 
-E = compute_essential_matrix(F, K)
 
-print("Essential Matrix E:")
-print(E)
+Rt1, tt1 = compute_rotation_translation(im1_gray, im2_gray, K)
+Rt2, tt2 = compute_rotation_translation(im2_gray, im3_gray, K)
+Rt3, tt3 = compute_rotation_translation(im1_gray, im3_gray, K)
 
+display_camera_movement([tt1, tt2])
 
-#-----------------Recover Rotation and Translation-----------------#
-# https://www-users.cse.umn.edu/~hspark/CSci5980/nister.pdf
-
-# There is ambiguity in finding which of R1 and R2 or t1 and t2 is the correct solution
-# Need to add in checks to determine the correct solution
-
-U, S, Vt = np.linalg.svd(E)
-
-if np.linalg.det(U) < 0:
-    U = -U
-if np.linalg.det(Vt) < 0:
-    Vt = -Vt
-
-D = np.array([[0, 1, 0],[-1, 0, 0],[0, 0, 1]])
-R1 = np.dot(np.dot(U, D), Vt)
-R2 = np.dot(np.dot(U, D.T), Vt)
-t1 = U[:, 2]
-t2 = -U[:, 2]
-
-print(f"T1: {t1}; T2: {t2}")
-
-#Plot the points 0,0,0 and T1, T2 in 3D
+"""
+# Plot the camera positions in 3D space, for arbitrary 3D points
 plt.figure()
 ax = plt.axes(projection='3d')
 ax.scatter(0, 0, 0, color='r')
 ax.text(0, 0, 0, "Camera 1")
-ax.scatter(t1[0], t1[1], t1[2], color='b')
-ax.text(t1[0], t1[1], t1[2], "Camera 2")
+ax.scatter(tt1[0], tt1[1], tt1[2], color='b')
+ax.text(tt1[0], tt1[1], tt1[2], "Camera 2")
+
+ax.scatter(tt2[0] + tt1[0], tt2[1] + tt1[1], tt2[2] + tt1[2], color='g')
+ax.text(tt2[0] + tt1[0], tt2[1] + tt1[1], tt2[2] + tt1[2], "Camera 3 from 2")  
+
+ax.scatter(tt3[0], tt3[1], tt3[2], color='y')
+ax.text(tt3[0], tt3[1], tt3[2], "Camera 3 from 1")
+
 
 #fix axes in same scale
-ax.set_xlim([-1, 1])
-ax.set_ylim([-1, 1])
-ax.set_zlim([-1, 1])
+ax.set_xlim([-2, 2])
+ax.set_ylim([-2, 2])
+ax.set_zlim([-2, 2])
 
-plt.show()
+plt.show() 
+"""
+
 
 
 
