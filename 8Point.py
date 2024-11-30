@@ -4,25 +4,18 @@ import matplotlib.pyplot as plt
 
 
 MIN_MATCH_COUNT = 10
-#-----------------Read Images-----------------#
 
-im1 = cv2.imread('IMG_3127.jpeg')
-im2 = cv2.imread('IMG_3126.jpeg')
-im3 = cv2.imread('IMG_3127.jpeg')
-
-# Convert images to grayscale
-im1_gray = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
-im2_gray = cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
-im3_gray = cv2.cvtColor(im3, cv2.COLOR_BGR2GRAY)
 
 #-----------------Find SIFT Keypoints and Match with RANSAC-----------------#
 
+# Detect SIFT keypoints in a greyscale image
 def find_sift_keypoints_and_descriptors(image_gray):
     sift = cv2.SIFT_create()
     keypoints, descriptors = sift.detectAndCompute(image_gray, None)
     return keypoints, descriptors
 
-def match_keypoints(des1, des2):
+# Find good matches between two sets of descriptors
+def match_descriptors(des1, des2):
     bf = cv2.BFMatcher()
     matches = bf.knnMatch(des1, des2, k=2)
     good_matches = []
@@ -31,6 +24,7 @@ def match_keypoints(des1, des2):
             good_matches.append(m)
     return good_matches
 
+# Find homography between two images given the keypoints
 def find_homography_and_draw_matches(im1_gray, im2_gray, kp1, kp2, good_matches):
     if len(good_matches) > MIN_MATCH_COUNT:
         src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
@@ -49,21 +43,24 @@ def find_homography_and_draw_matches(im1_gray, im2_gray, kp1, kp2, good_matches)
                        singlePointColor=None,
                        matchesMask=matchesMask,  # draw only inliers
                        flags=2)
-
+    
     img3 = cv2.drawMatches(im1_gray, kp1, im2_gray, kp2, good_matches, None, **draw_params)
-    return img3
+    inlier_pts1 = np.float32([kp1[m.queryIdx].pt for i, m in enumerate(good_matches) if matchesMask[i]])
+    inlier_pts2 = np.float32([kp2[m.trainIdx].pt for i, m in enumerate(good_matches) if matchesMask[i]])
+    
+    return img3, inlier_pts1, inlier_pts2
 
-# Function to find good matching points between two images
-def find_good_matching_points(im1_gray, im2_gray):
+# Function to find inlier matching points between two images
+def find_inlier_matching_points(im1_gray, im2_gray):
     # Find the SIFT key points and descriptors in the two images
     kp1, des1 = find_sift_keypoints_and_descriptors(im1_gray)
     kp2, des2 = find_sift_keypoints_and_descriptors(im2_gray)
 
     # Match keypoints
-    good = match_keypoints(des1, des2)
+    good = match_descriptors(des1, des2)
 
     # Find homography and draw matches
-    img3 = find_homography_and_draw_matches(im1_gray, im2_gray, kp1, kp2, good)
+    img3, inlier_pts1, inlier_pts2 = find_homography_and_draw_matches(im1_gray, im2_gray, kp1, kp2, good)
 
     # Enable interactive mode
     plt.ion()
@@ -74,16 +71,11 @@ def find_good_matching_points(im1_gray, im2_gray):
     plt.show()
     plt.ioff()
 
-    # Extract points from the good matches
-    pts1 = np.float32([kp1[m.queryIdx].pt for m in good])
-    pts2 = np.float32([kp2[m.trainIdx].pt for m in good])
-
-    return pts1, pts2
-
-pts1, pts2 = find_good_matching_points(im1_gray, im2_gray)
+    return inlier_pts1, inlier_pts2
 
 #-----------------Compute Fundamental Matrix-----------------#
 
+# Compute fundamental matrix from inlier matches of two images
 def compute_fundamental_matrix(pts1, pts2):
 
     # Normalize points
@@ -123,13 +115,33 @@ def compute_fundamental_matrix(pts1, pts2):
     F = np.dot(T2.T, np.dot(F_normalized, T1))
     return F
 
+#-----------------Recover Essential Matrix-----------------#
+
+# Recover essential matrix from fundamental matrix and camera intrinsic matrix
+def compute_essential_matrix(F, K):
+    E = np.matmul(np.matmul(K.T, F), K)
+    return E
+
+#-----------------Read Images-----------------#
+
+im1 = cv2.imread('IMG_3125.jpeg')
+im2 = cv2.imread('IMG_3126.jpeg')
+im3 = cv2.imread('IMG_3127.jpeg')
+
+# Convert images to grayscale
+im1_gray = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
+im2_gray = cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
+im3_gray = cv2.cvtColor(im3, cv2.COLOR_BGR2GRAY)
+
+pts1, pts2 = find_inlier_matching_points(im1_gray, im2_gray)
+pts3,pts4 = find_inlier_matching_points(im2_gray,im3_gray)
+
 F = compute_fundamental_matrix(pts1, pts2)
 
 print("Fundamental Matrix F:")
 print(F)
 
 
-#-----------------Recover Essential Matrix-----------------#
 
 # Retrieved from photo metadata for iPhone 13
 focal = 5.1
@@ -140,13 +152,11 @@ fm = focal * pixPerMm
 cx = im1_gray.shape[1] / 2
 cy = im1_gray.shape[0] / 2
 
+# Intrinsic matrix
 K = np.array([[fm, 0, cx],
               [0, fm, cy],
               [0, 0, 1]])
 
-def compute_essential_matrix(F, K):
-    E = np.matmul(np.matmul(K.T, F), K)
-    return E
 
 E = compute_essential_matrix(F, K)
 
