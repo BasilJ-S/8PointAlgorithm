@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-MIN_MATCH_COUNT = 10
+MIN_MATCH_COUNT = 5
 
 
 #-----------------Find SIFT Keypoints and Match with RANSAC-----------------#
@@ -31,18 +31,9 @@ def find_homography_and_draw_matches(im1_gray, im2_gray, kp1, kp2, good_matches)
         dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
         M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
         matchesMask = mask.ravel().tolist()
-        h, w = im1_gray.shape
-        pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
-        dst = cv2.perspectiveTransform(pts, M)
-        img2 = cv2.polylines(im2_gray, [np.int32(dst)], True, 255, 3, cv2.LINE_AA)
     else:
         print("Not enough matches are found - {}/{}".format(len(good_matches), MIN_MATCH_COUNT))
         matchesMask = None
-
-    draw_params = dict(matchColor=(0, 255, 0),  # draw matches in green color
-                       singlePointColor=None,
-                       matchesMask=matchesMask,  # draw only inliers
-                       flags=2)
     
     inlier_pts1 = np.float32([kp1[m.queryIdx].pt for i, m in enumerate(good_matches) if matchesMask[i]])
     inlier_pts2 = np.float32([kp2[m.trainIdx].pt for i, m in enumerate(good_matches) if matchesMask[i]])
@@ -192,7 +183,7 @@ def compute_rotation_translation(im1_gray, im2_gray, K):
     pts1, pts2 = find_inlier_matching_points(im1_gray, im2_gray)
 
     # Plot the inlier matching points
-    plot_two_images_with_matches(im1_gray, im2_gray, pts1, pts2)
+    #plot_two_images_with_matches(im1_gray, im2_gray, pts1, pts2)
 
     # Compute fundamental matrix
     F = compute_fundamental_matrix(pts1, pts2)
@@ -237,61 +228,61 @@ def display_camera_movement(t_list):
     plt.show()
 
 #-----------------Main Code-----------------#
+if __name__ == "__main__":
+    im1 = cv2.imread('IMG_3125.jpeg')
+    im2 = cv2.imread('IMG_3126.jpeg')
+    im3 = cv2.imread('IMG_3127.jpeg')
 
-im1 = cv2.imread('IMG_3125.jpeg')
-im2 = cv2.imread('IMG_3126.jpeg')
-im3 = cv2.imread('IMG_3127.jpeg')
+    # Convert images to grayscale
+    im1_gray = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
+    im2_gray = cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
+    im3_gray = cv2.cvtColor(im3, cv2.COLOR_BGR2GRAY)
 
-# Convert images to grayscale
-im1_gray = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
-im2_gray = cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
-im3_gray = cv2.cvtColor(im3, cv2.COLOR_BGR2GRAY)
+    # Retrieved from photo metadata for iPhone 13
+    focal = 5.1
+    pixPerMm = 2.835
+    fm = focal * pixPerMm
 
-# Retrieved from photo metadata for iPhone 13
-focal = 5.1
-pixPerMm = 2.835
-fm = focal * pixPerMm
+    # Assume center of image is the principal point
+    cx = im1_gray.shape[1] / 2
+    cy = im1_gray.shape[0] / 2
 
-# Assume center of image is the principal point
-cx = im1_gray.shape[1] / 2
-cy = im1_gray.shape[0] / 2
-
-# Intrinsic matrix
-K = np.array([[fm, 0, cx],
-              [0, fm, cy],
-              [0, 0, 1]])
-
-
-
-Rt1, tt1 = compute_rotation_translation(im1_gray, im2_gray, K)
-Rt2, tt2 = compute_rotation_translation(im2_gray, im3_gray, K)
-Rt3, tt3 = compute_rotation_translation(im1_gray, im3_gray, K)
-
-display_camera_movement([tt1, tt2])
-
-"""
-# Plot the camera positions in 3D space, for arbitrary 3D points
-plt.figure()
-ax = plt.axes(projection='3d')
-ax.scatter(0, 0, 0, color='r')
-ax.text(0, 0, 0, "Camera 1")
-ax.scatter(tt1[0], tt1[1], tt1[2], color='b')
-ax.text(tt1[0], tt1[1], tt1[2], "Camera 2")
-
-ax.scatter(tt2[0] + tt1[0], tt2[1] + tt1[1], tt2[2] + tt1[2], color='g')
-ax.text(tt2[0] + tt1[0], tt2[1] + tt1[1], tt2[2] + tt1[2], "Camera 3 from 2")  
-
-ax.scatter(tt3[0], tt3[1], tt3[2], color='y')
-ax.text(tt3[0], tt3[1], tt3[2], "Camera 3 from 1")
+    # Intrinsic matrix
+    K = np.array([[fm, 0, cx],
+                [0, fm, cy],
+                [0, 0, 1]])
 
 
-#fix axes in same scale
-ax.set_xlim([-2, 2])
-ax.set_ylim([-2, 2])
-ax.set_zlim([-2, 2])
 
-plt.show() 
-"""
+    Rt1, tt1 = compute_rotation_translation(im1_gray, im2_gray, K)
+    Rt2, tt2 = compute_rotation_translation(im2_gray, im3_gray, K)
+    Rt3, tt3 = compute_rotation_translation(im1_gray, im3_gray, K)
+
+    display_camera_movement([tt1, tt2])
+
+    """
+    # Plot the camera positions in 3D space, for arbitrary 3D points
+    plt.figure()
+    ax = plt.axes(projection='3d')
+    ax.scatter(0, 0, 0, color='r')
+    ax.text(0, 0, 0, "Camera 1")
+    ax.scatter(tt1[0], tt1[1], tt1[2], color='b')
+    ax.text(tt1[0], tt1[1], tt1[2], "Camera 2")
+
+    ax.scatter(tt2[0] + tt1[0], tt2[1] + tt1[1], tt2[2] + tt1[2], color='g')
+    ax.text(tt2[0] + tt1[0], tt2[1] + tt1[1], tt2[2] + tt1[2], "Camera 3 from 2")  
+
+    ax.scatter(tt3[0], tt3[1], tt3[2], color='y')
+    ax.text(tt3[0], tt3[1], tt3[2], "Camera 3 from 1")
+
+
+    #fix axes in same scale
+    ax.set_xlim([-2, 2])
+    ax.set_ylim([-2, 2])
+    ax.set_zlim([-2, 2])
+
+    plt.show() 
+    """
 
 
 
