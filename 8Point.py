@@ -101,8 +101,8 @@ def compute_fundamental_matrix(pts1, pts2):
                 [0, 1/pts2_std, -pts2_mean[1]/pts2_std],
                 [0, 0, 1]])
 
-    pts1_normalized = np.dot(T1, np.vstack((pts1.T, np.ones((1, pts1.shape[0])))))
-    pts2_normalized = np.dot(T2, np.vstack((pts2.T, np.ones((1, pts2.shape[0])))))
+    pts1_normalized = T1 @ np.vstack((pts1.T, np.ones((1, pts1.shape[0]))))
+    pts2_normalized = T2 @ np.vstack((pts2.T, np.ones((1, pts2.shape[0]))))
 
     # Construct matrix A for the normalized points
     A = np.zeros((len(pts1), 9))
@@ -118,10 +118,10 @@ def compute_fundamental_matrix(pts1, pts2):
     # Enforce rank-2 constraint on F
     U, S, Vt = np.linalg.svd(F_normalized)
     S[2] = 0
-    F_normalized = np.dot(U, np.dot(np.diag(S), Vt))
+    F_normalized = U @ np.diag(S) @ Vt
 
     # Denormalize the fundamental matrix
-    F = np.dot(T2.T, np.dot(F_normalized, T1))
+    F = T2.T @ F_normalized @ T1
     return F
 
 #-----------------Recover Essential Matrix-----------------#
@@ -147,8 +147,8 @@ def recover_rotation_translation(E):
         Vt = -Vt
 
     D = np.array([[0, 1, 0], [-1, 0, 0], [0, 0, 1]])
-    R1 = np.dot(np.dot(U, D), Vt)
-    R2 = np.dot(np.dot(U, D.T), Vt)
+    R1 = U@D@Vt
+    R2 = U@D.T@Vt
     t1 = U[:, 2]
     t2 = -U[:, 2]
 
