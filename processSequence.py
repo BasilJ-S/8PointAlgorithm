@@ -1,6 +1,6 @@
 
 
-from EightPoint import compute_rotation_translation
+from EightPoint import compute_rotation_translation, display_camera_movement
 import os
 import cv2
 import numpy as np
@@ -58,26 +58,31 @@ def read_from_directory(directory):
 
 
 
+if __name__ == "__main__":
 
-# Read images from the Reference_Render_cubes folder
-images = read_from_directory('Reference_Render_cubes')
-images = images[0:7]
+    # Read images from the Reference_Render_cubes folder
+    images = read_from_directory('Reference_Render_cubes')
+    images = images[0:7]
 
-# Retrieved from photo metadata for iPhone 13
-focal = 5.1
-pixPerMm = 2.835
-fm = focal * pixPerMm
+    # Retrieved from photo metadata for iPhone 13
+    focal = 5.1
+    pixPerMm = 2.835
+    fm = focal * pixPerMm
 
-# Assume center of image is the principal point
-cx = images[0].shape[1] / 2
-cy = images[0].shape[0] / 2
+    # Assume center of image is the principal point
+    cx = images[0].shape[1] / 2
+    cy = images[0].shape[0] / 2
 
-# Intrinsic matrix
-K = np.array([[fm, 0, cx],
-              [0, fm, cy],
-              [0, 0, 1]])
+    # Intrinsic matrix
+    K = np.array([[fm, 0, cx],
+                [0, fm, cy],
+                [0, 0, 1]])
+
+    #K = np.array([[2666.666666666, 0, 960],[0, 2666.666666666, 540],[
+    #0, 0, 1] ])
 
 
-t_list = compute_camera_translations(images,K)
-print(t_list)
+    t_list = compute_camera_translations(images,K)
+    display_camera_movement(t_list)
+    print(t_list)
 
