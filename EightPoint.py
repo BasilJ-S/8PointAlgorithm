@@ -208,7 +208,7 @@ class EightPoint:
         pts1, pts2 = self.getMatchingInliers(im1_gray, im2_gray)
 
         # Plot the inlier matching points
-        self.plotMatches(im1_gray, im2_gray, pts1, pts2)
+        #self.plotMatches(im1_gray, im2_gray, pts1, pts2)
 
         # Compute fundamental matrix
         F = self.getFundamental(pts1, pts2)
