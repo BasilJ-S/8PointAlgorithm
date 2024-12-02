@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-MIN_MATCH_COUNT = 5
+MIN_MATCH_COUNT = 8
 
 
 #-----------------Find SIFT Keypoints and Match with RANSAC-----------------#
@@ -25,7 +25,7 @@ def match_descriptors(des1, des2):
     return good_matches
 
 # Find homography between two images given the keypoints
-def find_homography_and_draw_matches(im1_gray, im2_gray, kp1, kp2, good_matches):
+def find_homography_and_draw_matches(kp1, kp2, good_matches):
     if len(good_matches) > MIN_MATCH_COUNT:
         src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
@@ -50,7 +50,7 @@ def find_inlier_matching_points(im1_gray, im2_gray):
     good = match_descriptors(des1, des2)
 
     # Find homography and draw matches
-    inlier_pts1, inlier_pts2 = find_homography_and_draw_matches(im1_gray, im2_gray, kp1, kp2, good)
+    inlier_pts1, inlier_pts2 = find_homography_and_draw_matches(kp1, kp2, good)
 
     return inlier_pts1, inlier_pts2
 
@@ -81,16 +81,16 @@ def compute_fundamental_matrix(pts1, pts2):
     # Normalize points
     pts1_mean = np.mean(pts1, axis=0)
     pts2_mean = np.mean(pts2, axis=0)
-    pts1_std = np.std(pts1)
-    pts2_std = np.std(pts2)
+    pts1_std = np.std(pts1, axis=0)
+    pts2_std = np.std(pts2, axis=0)
 
-    T1 = np.array([[1/pts1_std, 0, -pts1_mean[0]/pts1_std],
-                [0, 1/pts1_std, -pts1_mean[1]/pts1_std],
-                [0, 0, 1]])
+    T1 = np.array([[1/pts1_std[0], 0, -pts1_mean[0]/pts1_std[0]],
+                   [0, 1/pts1_std[1], -pts1_mean[1]/pts1_std[1]],
+                   [0, 0, 1]])
 
-    T2 = np.array([[1/pts2_std, 0, -pts2_mean[0]/pts2_std],
-                [0, 1/pts2_std, -pts2_mean[1]/pts2_std],
-                [0, 0, 1]])
+    T2 = np.array([[1/pts2_std[0], 0, -pts2_mean[0]/pts2_std[0]],
+                   [0, 1/pts2_std[1], -pts2_mean[1]/pts2_std[1]],
+                   [0, 0, 1]])
 
     pts1_normalized = T1 @ np.vstack((pts1.T, np.ones((1, pts1.shape[0]))))
     pts2_normalized = T2 @ np.vstack((pts2.T, np.ones((1, pts2.shape[0]))))
@@ -100,7 +100,7 @@ def compute_fundamental_matrix(pts1, pts2):
     for i in range(len(pts1)):
         x1, y1 = pts1_normalized[0, i], pts1_normalized[1, i]
         x2, y2 = pts2_normalized[0, i], pts2_normalized[1, i]
-        A[i] = [x1*x2, x1*y2, x1, y1*x2, y1*y2, y1, x2, y2, 1]
+        A[i] = [x1*x2, y1*x2, x2, x1*y2, y1*y2, y2, x1, y1, 1]
 
     # Compute the fundamental matrix using SVD
     U, S, Vt = np.linalg.svd(A)
@@ -183,7 +183,7 @@ def compute_rotation_translation(im1_gray, im2_gray, K):
     pts1, pts2 = find_inlier_matching_points(im1_gray, im2_gray)
 
     # Plot the inlier matching points
-    #plot_two_images_with_matches(im1_gray, im2_gray, pts1, pts2)
+    plot_two_images_with_matches(im1_gray, im2_gray, pts1, pts2)
 
     # Compute fundamental matrix
     F = compute_fundamental_matrix(pts1, pts2)
@@ -215,7 +215,7 @@ def display_camera_movement(t_list):
 
     # Plot the camera positions
     for i, t in enumerate(t_list):
-        current_displacement += t
+        current_displacement += np.array(t, dtype=np.float64)
         ax.scatter(current_displacement[0], current_displacement[1], current_displacement[2], color='b')
         ax.text(current_displacement[0], current_displacement[1], current_displacement[2], f"Camera {i+2}")
 
@@ -251,14 +251,33 @@ if __name__ == "__main__":
     K = np.array([[fm, 0, cx],
                 [0, fm, cy],
                 [0, 0, 1]])
+    
+    pts1, pts2 = find_inlier_matching_points(im1_gray, im2_gray)
+    
+    # TEST - CHECK THAT FUNDAMENTAL MATRIX CALCULATION IS CORRECT
+    F = compute_fundamental_matrix(pts1, pts2)
 
+    F_CV, mask = cv2.findFundamentalMat(pts1, pts2, cv2.FM_8POINT, 1.0, 0.999)
+    print("Fundamental matrix from our implementation:")
+    print(F)
+    print("Fundamental matrix from OpenCV:")
+    print(F_CV)
+    print("Difference between the two matrices:")
+    print(np.abs(F - F_CV))
+    
+    # compute the epipolar constraint error
+    pts1_hom = np.hstack((pts1, np.ones((pts1.shape[0], 1))))
+    pts2_hom = np.hstack((pts2, np.ones((pts2.shape[0], 1))))
+    error = np.abs(np.sum(pts2_hom * (F @ pts1_hom.T).T, axis=1))
+    
+    print("Epipolar constraint error (should be close to zero):")
+    print(error)
 
+    #Rt1, tt1 = compute_rotation_translation(im1_gray, im2_gray, K)
+    #Rt2, tt2 = compute_rotation_translation(im2_gray, im3_gray, K)
+    #Rt3, tt3 = compute_rotation_translation(im1_gray, im3_gray, K)
 
-    Rt1, tt1 = compute_rotation_translation(im1_gray, im2_gray, K)
-    Rt2, tt2 = compute_rotation_translation(im2_gray, im3_gray, K)
-    Rt3, tt3 = compute_rotation_translation(im1_gray, im3_gray, K)
-
-    display_camera_movement([tt1, tt2])
+    #display_camera_movement([tt1, tt2])
 
     """
     # Plot the camera positions in 3D space, for arbitrary 3D points
