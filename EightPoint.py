@@ -9,13 +9,13 @@ MIN_MATCH_COUNT = 8
 #-----------------Find SIFT Keypoints and Match with RANSAC-----------------#
 
 # Detect SIFT keypoints in a greyscale image
-def find_sift_keypoints_and_descriptors(image_gray):
+def getSIFT(image_gray):
     sift = cv2.SIFT_create()
     keypoints, descriptors = sift.detectAndCompute(image_gray, None)
     return keypoints, descriptors
 
 # Find good matches between two sets of descriptors
-def match_descriptors(des1, des2):
+def getMatches(des1, des2):
     bf = cv2.BFMatcher()
     matches = bf.knnMatch(des1, des2, k=2)
     good_matches = []
@@ -25,7 +25,7 @@ def match_descriptors(des1, des2):
     return good_matches
 
 # Find homography between two images given the keypoints
-def find_homography_and_draw_matches(kp1, kp2, good_matches):
+def getInliers(kp1, kp2, good_matches):
     if len(good_matches) > MIN_MATCH_COUNT:
         src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
@@ -41,21 +41,21 @@ def find_homography_and_draw_matches(kp1, kp2, good_matches):
     return inlier_pts1, inlier_pts2
 
 # Function to find inlier matching points between two images
-def find_inlier_matching_points(im1_gray, im2_gray):
+def getMatchingInliers(im1_gray, im2_gray):
     # Find the SIFT key points and descriptors in the two images
-    kp1, des1 = find_sift_keypoints_and_descriptors(im1_gray)
-    kp2, des2 = find_sift_keypoints_and_descriptors(im2_gray)
+    kp1, des1 = getSIFT(im1_gray)
+    kp2, des2 = getSIFT(im2_gray)
 
     # Match keypoints
-    good = match_descriptors(des1, des2)
+    good = getMatches(des1, des2)
 
     # Find homography and draw matches
-    inlier_pts1, inlier_pts2 = find_homography_and_draw_matches(kp1, kp2, good)
+    inlier_pts1, inlier_pts2 = getInliers(kp1, kp2, good)
 
     return inlier_pts1, inlier_pts2
 
 # Plot two images side by side with matches shown
-def plot_two_images_with_matches(im1, im2, inlier_pts1, inlier_pts2):
+def plotMatches(im1, im2, inlier_pts1, inlier_pts2):
     # Convert grayscale images to BGR so that we can draw colored lines
     im1_color = cv2.cvtColor(im1, cv2.COLOR_GRAY2BGR)
     im2_color = cv2.cvtColor(im2, cv2.COLOR_GRAY2BGR)
@@ -76,7 +76,7 @@ def plot_two_images_with_matches(im1, im2, inlier_pts1, inlier_pts2):
 #-----------------Compute Fundamental Matrix-----------------#
 
 # Compute fundamental matrix from inlier matches of two images
-def compute_fundamental_matrix(pts1, pts2):
+def getFundamental(pts1, pts2):
 
     # Normalize points
     pts1_mean = np.mean(pts1, axis=0)
@@ -118,7 +118,7 @@ def compute_fundamental_matrix(pts1, pts2):
 #-----------------Recover Essential Matrix-----------------#
 
 # Recover essential matrix from fundamental matrix and camera intrinsic matrix
-def compute_essential_matrix(F, K):
+def getEssential(F, K):
     E = np.transpose(K) @ F @ K
     return E
 
@@ -129,7 +129,7 @@ def compute_essential_matrix(F, K):
 # Need to add in checks to determine the correct solution
 
 # function to recover all valid R and t values from essential matrix E
-def recover_rotation_translation(E):
+def getCandidateTransform(E):
     U, S, Vt = np.linalg.svd(E)
 
     if np.linalg.det(U) < 0:
@@ -147,7 +147,7 @@ def recover_rotation_translation(E):
 
 
 # Disambiguate rotation and translation based on valid points and intrinsics
-def disambiguate_rotation_translation(R1, R2, t1, t2, pts1, pts2, K):
+def disambiguateTransform(R1, R2, t1, t2, pts1, pts2, K):
     P1 = np.hstack((np.eye(3), np.zeros((3, 1))))
     P2_candidates = [
         np.hstack((R1, t1.reshape(-1, 1))),
@@ -160,56 +160,64 @@ def disambiguate_rotation_translation(R1, R2, t1, t2, pts1, pts2, K):
     bestR = None
     bestT = None
     for i, P2 in enumerate(P2_candidates):
-
+        
+        # Normalize points using intrinsic matrix
         pts1_normalized = np.linalg.inv(K) @ np.hstack((pts1, np.ones((pts1.shape[0], 1)))).T
         pts2_normalized = np.linalg.inv(K) @ np.hstack((pts2, np.ones((pts2.shape[0], 1)))).T
 
+        # Triangulate points
         points_4d_hom = cv2.triangulatePoints(P1, P2, pts1_normalized[:2], pts2_normalized[:2]).T
-
-        #points_4d_hom = cv2.triangulatePoints(P1, P2, pts1.T, pts2.T).T
+        
+        # If C1 < 0, the point is behind the first camera
         c1 = np.multiply(points_4d_hom[:,2],points_4d_hom[:,3])
+        # Project points to second camera to get C2. If C2 < 0, the point is behind the second camera
         c2 = np.multiply((P2 @ points_4d_hom.T).T[:,2],points_4d_hom[:,3])
         c = np.column_stack((c1, c2))
-        print(c.shape)
+
+        # Cound all points that are in front of both cameras
         validPoints = (c[:,0] > 0) & (c[:,1] > 0)
         numValidPoints = sum(validPoints)
 
+        # Keep track of the best solution
         if numValidPoints >= best_valid_point_count:
             print(f"Correct solution: R = {P2[:, :3]}, t = {P2[:, 3]}, valid points count = {numValidPoints}")
             best_valid_point_count = numValidPoints
             bestR = P2[:, :3]
             bestT = P2[:, 3]
 
+    # If no valid solution is found, return identiy matrices
+    # This means if a change cannot be detected, we assume the camera is stationary
     if bestR is None or bestT is None:
         print("No valid solution found")
-        return None, None
+        bestR = np.eye(3,3)
+        bestT = np.zeros(3)
 
     return bestR, bestT
 
 # Function to compute camera rotation and translation from two images
-def compute_rotation_translation(im1_gray, im2_gray, K):
+def getRotationTranslation(im1_gray, im2_gray, K):
     # Find inlier matching points
-    pts1, pts2 = find_inlier_matching_points(im1_gray, im2_gray)
+    pts1, pts2 = getMatchingInliers(im1_gray, im2_gray)
 
     # Plot the inlier matching points
-    plot_two_images_with_matches(im1_gray, im2_gray, pts1, pts2)
+    plotMatches(im1_gray, im2_gray, pts1, pts2)
 
     # Compute fundamental matrix
-    F = compute_fundamental_matrix(pts1, pts2)
+    F = getFundamental(pts1, pts2)
 
     # Compute essential matrix
-    E = compute_essential_matrix(F, K)
+    E = getEssential(F, K)
 
     # Recover rotation and translation
-    R1, R2, t1, t2 = recover_rotation_translation(E)
+    R1, R2, t1, t2 = getCandidateTransform(E)
 
     # Disambiguate rotation and translation
-    R, t = disambiguate_rotation_translation(R1, R2, t1, t2, pts1, pts2, K)
+    R, t = disambiguateTransform(R1, R2, t1, t2, pts1, pts2, K)
 
     return R,t
 
 # Display the movement of the camera in 3D space from an array of translation matrices
-def display_camera_movement(t_list):
+def plotCameraMovement(t_list):
     # Enable interactive mode
     # Create a 3D plot
     fig = plt.figure()
@@ -261,10 +269,10 @@ if __name__ == "__main__":
                 [0, fm, cy],
                 [0, 0, 1]])
     
-    pts1, pts2 = find_inlier_matching_points(im3_gray, im2_gray)
+    pts1, pts2 = getMatchingInliers(im3_gray, im2_gray)
     
     # TEST - CHECK THAT FUNDAMENTAL MATRIX CALCULATION IS CORRECT
-    F = compute_fundamental_matrix(pts1, pts2)
+    F = getFundamental(pts1, pts2)
 
     F_CV, mask = cv2.findFundamentalMat(pts1, pts2, cv2.FM_8POINT, 1.0, 0.999)
     print("Fundamental matrix from our implementation:")
@@ -283,7 +291,7 @@ if __name__ == "__main__":
     print(error)
 
     # TEST - Compute the essential matrix - INACCURATE
-    E = compute_essential_matrix(F, K)
+    E = getEssential(F, K)
     E_CV, mask = cv2.findEssentialMat(pts1, pts2, K, method=cv2.RANSAC, prob=0.9, threshold=1.0)
 
     print("Essential matrix from our implementation:")
@@ -295,8 +303,8 @@ if __name__ == "__main__":
 
     # Test - Recover rotation and translation
 
-    R1, R2, t1, t2 = recover_rotation_translation(E)
-    R,t = disambiguate_rotation_translation(R1, R2, t1, t2, pts1, pts2, K)
+    R1, R2, t1, t2 = getCandidateTransform(E)
+    R,t = disambiguateTransform(R1, R2, t1, t2, pts1, pts2, K)
     _, R_CV, t_CV, mask = cv2.recoverPose(E, pts1, pts2, K)
 
     print("Rotation matrix from our implementation:")

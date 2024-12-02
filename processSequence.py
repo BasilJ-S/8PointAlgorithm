@@ -1,6 +1,6 @@
 
 
-from EightPoint import compute_rotation_translation, display_camera_movement
+from EightPoint import getRotationTranslation, plotCameraMovement
 import os
 import cv2
 import numpy as np
@@ -13,7 +13,7 @@ def compute_camera_translations(images, K):
     # Iterate over the images
     for i in range(len(images) - 1):
         # Compute the camera rotation and translation between the current and next image
-        R, t = compute_rotation_translation(images[i], images[i + 1], K)
+        R, t = getRotationTranslation(images[i], images[i + 1], K)
 
         # Append the translation matrix to the list
         t_list.append(t)
@@ -83,6 +83,6 @@ if __name__ == "__main__":
 
 
     t_list = compute_camera_translations(images,K)
-    display_camera_movement(t_list)
+    plotCameraMovement(t_list)
     print(t_list)
 
