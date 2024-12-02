@@ -223,6 +223,32 @@ class EightPoint:
         R, t = self.__disambiguateTransform(R1, R2, t1, t2, pts1, pts2, K)
 
         return R,t
+    
+    # This function implements end to end camera pose estimation using OpenCV functions
+    def getRotationTranslationFromImagesOpenCV(self, im1, im2, K):
+
+        sift = cv2.SIFT_create()
+        keypoints1, descriptors1 = sift.detectAndCompute(im1, None)
+        keypoints2, descriptors2 = sift.detectAndCompute(im2, None)
+
+        bf = cv2.BFMatcher()
+        matches = bf.knnMatch(descriptors1, descriptors2, k=2)
+        good_matches = []
+        for m, n in matches:
+            if m.distance < 0.75 * n.distance:
+                good_matches.append(m)
+        if len(good_matches) > MIN_MATCH_COUNT:
+            pts1 = np.float32([keypoints1[m.queryIdx].pt for m in good_matches])
+            pts2 = np.float32([keypoints2[m.trainIdx].pt for m in good_matches])
+
+            E_CV, mask = cv2.findEssentialMat(pts1, pts2, K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
+            _, R_CV, t_CV, mask = cv2.recoverPose(E_CV, pts1, pts2, K)
+        else:
+            print("Not enough matches are found - {}/{}".format(len(good_matches), MIN_MATCH_COUNT))
+            R_CV = np.eye(3)
+            t_CV = np.zeros(3)
+        
+        return R_CV,t_CV.flatten()
 
 # Display the movement of the camera in 3D space from an array of translation matrices
 def plotCameraMovement(t_list):
