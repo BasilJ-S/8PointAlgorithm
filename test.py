@@ -23,8 +23,25 @@ def get_matched_points(kp1, kp2, matches):
     pts2 = np.float32([kp2[m.trainIdx].pt for m in matches])
     return pts1, pts2
 
+def draw_matches(img1, kp1, img2, kp2, matches):
+    match_color = (0, 0, 255)  # Red points
+    
+    # Draw the matches
+    img_matches = cv2.drawMatches(img1, kp1, img2, kp2, matches, None,
+                                  matchColor=match_color,
+                                  flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+    
+    # Convert the image to RGB
+    img_matches = cv2.cvtColor(img_matches, cv2.COLOR_BGR2RGB)
+    
+    # Plot the matches
+    plt.figure(figsize=(15, 10))
+    plt.imshow(img_matches)
+    plt.title('Feature Matching')
+    plt.show()
+
 def estimate_camera_poses(pts1, pts2, K):
-    E, mask = cv2.findEssentialMat(pts1, pts2, K)
+    E, mask = cv2.findEssentialMat(pts1, pts2, K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
     _, R, t, mask = cv2.recoverPose(E, pts1, pts2, K)
     return R, t
 
@@ -110,6 +127,20 @@ def main():
     ax.set_title('3D Positions of Camera for Each Image')
 
     plt.show()
+  
+def plot_matches():
+    img1 = cv2.imread('Reference_Render_cubes\cubes0001.png')
+    img2 = cv2.imread('Reference_Render_cubes\cubes0090.png')
+
+    kp1, des1 = extract_features(img1)
+    kp2, des2 = extract_features(img2)
+
+    matches = match_features(des1, des2)
+    print(len(matches))
+
+    # Draw the matches
+    draw_matches(img1, kp1, img2, kp2, matches)
 
 if __name__ == "__main__":
-    main()
+    #main() # Uncomment to plot camera positions
+    plot_matches()
