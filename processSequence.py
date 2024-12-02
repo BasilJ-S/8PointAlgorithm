@@ -1,69 +1,96 @@
 
 
-from EightPoint import EightPoint, plotCameraMovement
+from EightPoint import EightPoint
 import os
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
+from collections.abc import Callable
 
-# This function takes in a list of images and returns a list of camera translation matrices
-def compute_camera_translations(images, K):
-    # Initialize the list of camera translation matrices
-    t_list = []
-    eightP = EightPoint()
+class Sequence:
+    def __init__(self, directory):
+        self.directory = directory
+        self.images = self.__read_from_directory(directory)
+        self.image_names = self.__get_image_names(directory)
 
-    # Iterate over the images
-    for i in range(len(images) - 1):
-        # Compute the camera rotation and translation between the current and next image
-        R, t = eightP.getRotationTranslationFromImages(images[i], images[i + 1], K)
+    # Method should be one of the following:
+    # EightPoint.getRotationTranslationFromImagesOpenCV
+    # EightPoint.getRotationTranslationFromImages
+    def computeCameraMovement(self, K, method: Callable):
+        # Initialize with the first camera position at the origin
+        camera_positions = [np.zeros((3))]  
+        R_prev = np.eye(3)
+        t_prev = np.zeros((1, 3))
 
-        # Append the translation matrix to the list
-        t_list.append(t)
+        for i in range(len(self.images) - 1):
 
-    return t_list
+            R, t = method(self.images[i], self.images[i + 1], K)
+            print(t_prev)
+            print('-')
+            print(t)
+            print ('--')
+            
+            # Compute global camera position
+            t_global = t_prev + R_prev @ t
+            R_global = R @ R_prev
+            print(t_global)
+            print('---')
+
+            camera_positions = np.append(camera_positions, [t_global.flatten()], axis=0)  # Update previous pose
+            print(camera_positions)
+            R_prev = R_global
+            t_prev = t_global
+
+        print(camera_positions)
+        # Convert camera positions to numpy array
+        camera_positions = np.array(camera_positions)
+
+        # Check if the camera positions have the correct shape
+        if camera_positions.shape[1] != 3:
+            print("Warning: Camera positions have incorrect shape.")
+
+        # Plot the 3D positions
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(camera_positions[:, 0], camera_positions[:, 1], camera_positions[:, 2], c='r', marker='o')
+
+        colors = plt.cm.viridis(np.linspace(0, 1, len(camera_positions)))
+
+        for i, (x, y, z) in enumerate(camera_positions):
+            ax.text(x, y, z, f'Image {i+1}', size=10, zorder=1, color=colors[i])
+
+        ax.set_xlabel('X Label')
+        ax.set_ylabel('Y Label')
+        ax.set_zlabel('Z Label')
+        ax.set_title('3D Positions of Camera for Each Image')
+        ax.set_xlim([0, 50])
+        ax.set_ylim([0, 50])
+        ax.set_zlim([0, 50])
+
+        plt.show()
 
 
-# This function reads all images in the Reference_Render_cubes folder and returns a list of images
-def read_images(image_names, directory):
-    # Initialize the list of images
-    images = []
+    # This function returns a list of the names of all files in the Reference_Render_cubes folder
+    def __get_image_names(self,directory):
 
-    # Iterate over all images in the Reference_Render_cubes folder
-    for i in range(0, 90):
-        # Read the image
-        img = cv2.imread(directory + '/' + image_names[i])
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        image_files = sorted([os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.png')])
 
-        # Append the image to the list
-        images.append(img)
+        # Return the list of image names
+        return image_files
 
-    # Return the list of images
-    return images
-
-# This function returns a list of the names of all files in the Reference_Render_cubes folder
-def get_image_names(directory):
-    # Initialize the list of image names
-    image_names = []
-
-    # Get the list of all files in the Reference_Render_cubes folder
-    for filename in os.listdir(directory):
-        # Append the file name to the list
-        image_names.append(filename)
-
-    # Return the list of image names
-    return image_names
-
-def read_from_directory(directory):
-    image_names = get_image_names(directory)
-    images = read_images(image_names, directory)
-    return images
+    def __read_from_directory(self,directory):
+        image_names = self.__get_image_names(directory)
+        print(image_names)
+        # Load the sequence of images
+        images = [cv2.cvtColor( cv2.imread(img), cv2.COLOR_BGR2GRAY) for img in image_names]
+        return images
 
 
 
 if __name__ == "__main__":
 
-    # Read images from the Reference_Render_cubes folder
-    images = read_from_directory('Reference_Render_cubes')
-    images = images[0:7]
+    sequence = Sequence('./Reference_Render_cubes')
+    print(sequence.image_names)
 
     # Retrieved from photo metadata for iPhone 13
     focal = 5.1
@@ -71,20 +98,19 @@ if __name__ == "__main__":
     fm = focal * pixPerMm
 
     # Assume center of image is the principal point
-    cx = images[0].shape[1] / 2
-    cy = images[0].shape[0] / 2
+    cx = sequence.images[0].shape[1] / 2
+    cy = sequence.images[0].shape[0] / 2
 
     # Intrinsic matrix
     K = np.array([[fm, 0, cx],
                 [0, fm, cy],
                 [0, 0, 1]])
 
-    K = np.array([[2666.666666666, 0, 960],[0, 2666.666666666, 540],[
-    0, 0, 1] ])
+    #K = np.array([[2666.666666666, 0, 960],[0, 2666.666666666, 540],[
+    #0, 0, 1] ])
+    #eightP = EightPoint()
     eightP = EightPoint()
 
-
-    t_list = compute_camera_translations(images,K)
-    plotCameraMovement(t_list)
-    print(t_list)
+    sequence.computeCameraMovement(K, eightP.getRotationTranslationFromImagesOpenCV)
+    
 
