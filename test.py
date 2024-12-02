@@ -44,13 +44,20 @@ def main():
     # Assume center of image is the principal point
     cx = images[0].shape[1] / 2
     cy = images[0].shape[0] / 2
-
-    # Intrinsic matrix
+    
+    # Intrinsic matrix (Iphone 13)
     K = np.array([[fm, 0, cx],
                 [0, fm, cy],
                 [0, 0, 1]])
+    """
+    # Intrinsic matrix (Joey's estimation)
+    K = np.array([[2666.666666666, 0, 960],
+                [0, 2666.666666666, 540],
+                [0, 0, 1]])
+    """
 
-    camera_positions = [np.zeros((3,))]  # Initialize with the first camera position at the origin
+    # Initialize with the first camera position at the origin
+    camera_positions = [np.zeros((3,))]  
     R_prev = np.eye(3)
     t_prev = np.zeros((3, 1))
 
