@@ -119,7 +119,7 @@ def compute_fundamental_matrix(pts1, pts2):
 
 # Recover essential matrix from fundamental matrix and camera intrinsic matrix
 def compute_essential_matrix(F, K):
-    E = np.matmul(np.matmul(K.T, F), K)
+    E = np.transpose(K) @ F @ K
     return E
 
 #-----------------Recover Rotation and Translation-----------------#
@@ -156,24 +156,33 @@ def disambiguate_rotation_translation(R1, R2, t1, t2, pts1, pts2, K):
         np.hstack((R2, t2.reshape(-1, 1))),
     ]
 
-    max_valid_points_count = 0
-    threshold = 10
+    best_valid_point_count = 0
     bestR = None
     bestT = None
     for i, P2 in enumerate(P2_candidates):
-        points_4d_hom = cv2.triangulatePoints(P1, P2, pts1.T, pts2.T)
-        points_3d = points_4d_hom[:3] / points_4d_hom[3]
 
-        in_front_of_cam1 = points_3d[2, :] > 0
-        in_front_of_cam2 = (P2 @ np.vstack((points_3d, np.ones((1, points_3d.shape[1])))))[2, :] > 0
+        pts1_normalized = np.linalg.inv(K) @ np.hstack((pts1, np.ones((pts1.shape[0], 1)))).T
+        pts2_normalized = np.linalg.inv(K) @ np.hstack((pts2, np.ones((pts2.shape[0], 1)))).T
 
-        valid_points_count = np.sum(in_front_of_cam1 & in_front_of_cam2)
+        points_4d_hom = cv2.triangulatePoints(P1, P2, pts1_normalized[:2], pts2_normalized[:2]).T
 
-        if valid_points_count > threshold and valid_points_count > max_valid_points_count:
-            print(f"Correct solution: R = {P2[:, :3]}, t = {P2[:, 3]}, valid points count = {valid_points_count}")
-            max_valid_points_count = valid_points_count
+        #points_4d_hom = cv2.triangulatePoints(P1, P2, pts1.T, pts2.T).T
+        c1 = np.multiply(points_4d_hom[:,2],points_4d_hom[:,3])
+        c2 = np.multiply((P2 @ points_4d_hom.T).T[:,2],points_4d_hom[:,3])
+        c = np.column_stack((c1, c2))
+        print(c.shape)
+        validPoints = (c[:,0] > 0) & (c[:,1] > 0)
+        numValidPoints = sum(validPoints)
+
+        if numValidPoints >= best_valid_point_count:
+            print(f"Correct solution: R = {P2[:, :3]}, t = {P2[:, 3]}, valid points count = {numValidPoints}")
+            best_valid_point_count = numValidPoints
             bestR = P2[:, :3]
             bestT = P2[:, 3]
+
+    if bestR is None or bestT is None:
+        print("No valid solution found")
+        return None, None
 
     return bestR, bestT
 
@@ -252,7 +261,7 @@ if __name__ == "__main__":
                 [0, fm, cy],
                 [0, 0, 1]])
     
-    pts1, pts2 = find_inlier_matching_points(im1_gray, im2_gray)
+    pts1, pts2 = find_inlier_matching_points(im3_gray, im2_gray)
     
     # TEST - CHECK THAT FUNDAMENTAL MATRIX CALCULATION IS CORRECT
     F = compute_fundamental_matrix(pts1, pts2)
@@ -265,13 +274,47 @@ if __name__ == "__main__":
     print("Difference between the two matrices:")
     print(np.abs(F - F_CV))
     
-    # compute the epipolar constraint error
+    # TEST - compute the epipolar constraint error
     pts1_hom = np.hstack((pts1, np.ones((pts1.shape[0], 1))))
     pts2_hom = np.hstack((pts2, np.ones((pts2.shape[0], 1))))
     error = np.abs(np.sum(pts2_hom * (F @ pts1_hom.T).T, axis=1))
     
     print("Epipolar constraint error (should be close to zero):")
     print(error)
+
+    # TEST - Compute the essential matrix - INACCURATE
+    E = compute_essential_matrix(F, K)
+    E_CV, mask = cv2.findEssentialMat(pts1, pts2, K, method=cv2.RANSAC, prob=0.9, threshold=1.0)
+
+    print("Essential matrix from our implementation:")
+    print(E)
+    print("Essential matrix from OpenCV:")
+    print(E_CV)
+    print("Difference between the two matrices:")
+    print(np.abs(E - E_CV))
+
+    # Test - Recover rotation and translation
+
+    R1, R2, t1, t2 = recover_rotation_translation(E)
+    R,t = disambiguate_rotation_translation(R1, R2, t1, t2, pts1, pts2, K)
+    _, R_CV, t_CV, mask = cv2.recoverPose(E, pts1, pts2, K)
+
+    print("Rotation matrix from our implementation:")
+    print(R)
+    print("All rotation Matrices:")
+    print(R1,"\n", R2)
+    print("Rotation matrix from OpenCV:")
+    print(R_CV)
+    print("Difference between the two matrices:")
+    print(np.abs(R - R_CV))
+
+    print("Translation vector from our implementation:")
+    print(t)
+    print("Translation vector from OpenCV:")
+    print(t_CV.T)
+    print("Difference between the two vectors:")
+    print(np.abs(t - t_CV.T))
+
 
     #Rt1, tt1 = compute_rotation_translation(im1_gray, im2_gray, K)
     #Rt2, tt2 = compute_rotation_translation(im2_gray, im3_gray, K)
