@@ -145,6 +145,34 @@ class EightPoint:
         t1 = U[:, 2]
         t2 = -U[:, 2]
 
+        """ # Plot t1, t2, R1, R2. T1, t2 are points, R1 and R2 should be displayed as unit vectors of just the Z direction
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Plot t1 and t2
+        ax.scatter(t1[0], t1[1], t1[2], color='r', label='t1')
+        ax.scatter(t2[0], t2[1], t2[2], color='b', label='t2')
+
+        # Plot R1 and R2 as unit våectors in the Z direction at t1 and t2
+        ax.quiver(t1[0], t1[1], t1[2], R1[0, 2], R1[1, 2], R1[2, 2], color='g', label='R1 at t1')
+        ax.quiver(t1[0], t1[1], t1[2], R2[0, 2], R2[1, 2], R2[2, 2], color='y', label='R2 at t1')
+        ax.quiver(t2[0], t2[1], t2[2], R1[0, 2], R1[1, 2], R1[2, 2], color='g', linestyle='dashed', label='R1 at t2')
+        ax.quiver(t2[0], t2[1], t2[2], R2[0, 2], R2[1, 2], R2[2, 2], color='y', linestyle='dashed', label='R2 at t2')
+
+        ax.set_xlim([-1, 1])
+        ax.set_ylim([-1, 1])
+        ax.set_zlim([-1, 1])
+
+        ax.set_xlabel('X', fontsize=14)
+        ax.set_ylabel('Y', fontsize=14)
+        ax.set_zlabel('Z', fontsize=14)
+        ax.scatter(0, 0, 0, color='k', s=100, label='Origin')
+        # Add quiver in the direction of the Z axis
+        ax.quiver(0, 0, 0, 0, 0, 1, color='k', label='Z axis')
+        ax.legend(fontsize=14)
+        plt.show() """
+
+
         return R1, R2, t1, t2
 
 
@@ -242,6 +270,8 @@ class EightPoint:
             pts2 = np.float32([keypoints2[m.trainIdx].pt for m in good_matches])
 
             E_CV, mask = cv2.findEssentialMat(pts1, pts2, K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
+            # R1, R2, t1, t2 = self.__getCandidateTransform(E_CV)
+            # R_CV, t_CV = self.__disambiguateTransform(R1, R2, t1, t2, pts1, pts2, K)
             _, R_CV, t_CV, mask = cv2.recoverPose(E_CV, pts1, pts2, K)
         else:
             print("Not enough matches are found - {}/{}".format(len(good_matches), MIN_MATCH_COUNT))
