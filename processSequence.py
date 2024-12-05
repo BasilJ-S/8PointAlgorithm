@@ -89,7 +89,7 @@ class Sequence:
 
 if __name__ == "__main__":
 
-    sequence = Sequence('./Reference_Render_cubes')
+    sequence = Sequence('./Reference_Render_Translation')
     print(sequence.image_names)
 
     # Retrieved from photo metadata for iPhone 13
@@ -111,6 +111,6 @@ if __name__ == "__main__":
     #eightP = EightPoint()
     eightP = EightPoint()
 
-    sequence.computeCameraMovement(K, eightP.getRotationTranslationFromImagesOpenCV)
+    sequence.computeCameraMovement(K, eightP.getRotationTranslationFromImagesRANSAC)
     
 
