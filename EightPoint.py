@@ -188,16 +188,19 @@ class EightPoint:
     
     # Use RANSAC to find the fundamental matrix between two images, taking in all matches as input (NOT INLIER MATCHES)
     def getFundamentalRANSAC(self,pts1,pts2):
-        bestF = None
+        bestF = np.eye(3)
         bestInliers = 0
-        concensusSetMinSize = 10
-        concensusMaxError = 0.00001
-        inlierMaxError = 0.00001
+        concensusSetMinSize = 9
+        concensusMaxError = 1
+        inlierMaxError = 0.1
         for i in range(100):   
             # Randomly select 8 points
-            idx = np.random.choice(len(pts1), 8, replace=False)
-            pts1_sample = pts1[idx]
-            pts2_sample = pts2[idx]
+            try:
+                idx = np.random.choice(len(pts1), 8, replace=False)
+                pts1_sample = pts1[idx]
+                pts2_sample = pts2[idx]
+            except:
+                continue
 
             # Compute the fundamental matrix using least squares
             F = self.getFundementalLS(pts1_sample, pts2_sample, eightPoints=True)
@@ -215,7 +218,7 @@ class EightPoint:
                 inliers = np.sum(error < inlierMaxError)
                 if inliers > bestInliers:
                     bestInliers = inliers
-                    print(f"Best number of inliers: {bestInliers}")
+                    print(f"Best number of inliers: {bestInliers}, outliers: {len(pts1) - bestInliers}")
                     bestF = F
         return bestF
 
