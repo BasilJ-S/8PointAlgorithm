@@ -26,7 +26,6 @@ class Sequence:
         R_prev = np.eye(3)
         t_prev = np.zeros((1, 3))
 
-        base = 0
 
         for i in tqdm(range(len(self.images) - 1)):
 
@@ -36,7 +35,7 @@ class Sequence:
                 t_global = t_prev + R_prev @ t
                 R_global = R @ R_prev
             else:
-                R_global, t_global = method(self.images[base], self.images[i + 1], K)
+                R_global, t_global = method(self.images[0], self.images[i + 1], K)
                 # Assume camera is travelling in a straigh line, so vector should be (i+1) * t_global
                 t_global = (i+1) * t_global
 
@@ -56,8 +55,7 @@ class Sequence:
         # Plot the 3D positions
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(camera_positions[:, 0], camera_positions[:, 1], camera_positions[:, 2], c='r', marker='o')
-
+        ax.plot(camera_positions[:, 0], camera_positions[:, 1], camera_positions[:, 2], marker='o', linestyle='-', color='r')  
         colors = plt.cm.viridis(np.linspace(0, 1, len(camera_positions)))
 
         for i, (x, y, z) in enumerate(camera_positions):
@@ -67,9 +65,6 @@ class Sequence:
         ax.set_ylabel('Y Label')
         ax.set_zlabel('Z Label')
         ax.set_title('3D Positions of Camera for Each Image')
-        ax.set_xlim([0, 50])
-        ax.set_ylim([0, 50])
-        ax.set_zlim([0, 50])
 
         plt.show()
 
@@ -93,8 +88,7 @@ class Sequence:
 
 if __name__ == "__main__":
 
-    sequence = Sequence('./Reference_Render_cubes')
-    print(sequence.image_names)
+    sequence = Sequence('./Reference_Render_Translation')
 
     # Retrieved from photo metadata for iPhone 13
     focal = 5.1
@@ -112,9 +106,8 @@ if __name__ == "__main__":
 
     #K = np.array([[2666.666666666, 0, 960],[0, 2666.666666666, 540],[
     #0, 0, 1] ])
-    #eightP = EightPoint()
     eightP = EightPoint()
 
-    sequence.computeCameraMovement(K, eightP.getRotationTranslationFromImagesOpenCV, iterative=True)
+    sequence.computeCameraMovement(K, eightP.getRotationTranslationFromImagesRANSAC, iterative=False)
     
 
