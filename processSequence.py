@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from collections.abc import Callable
+from tqdm import tqdm
 
 class Sequence:
     def __init__(self, directory):
@@ -13,31 +14,34 @@ class Sequence:
         self.images = self.__read_from_directory(directory)
         self.image_names = self.__get_image_names(directory)
 
+    # Compute and plot the camera movement for the sequence of images
     # Method should be one of the following:
     # EightPoint.getRotationTranslationFromImagesOpenCV
     # EightPoint.getRotationTranslationFromImages
-    def computeCameraMovement(self, K, method: Callable):
+    # If iterative is True, the method calculates the camera position iteratively image by image
+    # If iterative is False, the method calculates the camera relative to the first image
+    def computeCameraMovement(self, K, method: Callable, iterative=True):
         # Initialize with the first camera position at the origin
         camera_positions = [np.zeros((3))]  
         R_prev = np.eye(3)
         t_prev = np.zeros((1, 3))
 
-        for i in range(len(self.images) - 1):
+        base = 0
 
-            R, t = method(self.images[i], self.images[i + 1], K)
-            print(t_prev)
-            print('-')
-            print(t)
-            print ('--')
-            
-            # Compute global camera position
-            t_global = t_prev + R_prev @ t
-            R_global = R @ R_prev
-            print(t_global)
-            print('---')
+        for i in tqdm(range(len(self.images) - 1)):
+
+            if iterative:
+                R, t = method(self.images[i], self.images[i + 1], K)
+                # Compute global camera position
+                t_global = t_prev + R_prev @ t
+                R_global = R @ R_prev
+            else:
+                R_global, t_global = method(self.images[base], self.images[i + 1], K)
+                # Assume camera is travelling in a straigh line, so vector should be (i+1) * t_global
+                t_global = (i+1) * t_global
 
             camera_positions = np.append(camera_positions, [t_global.flatten()], axis=0)  # Update previous pose
-            print(camera_positions)
+            #print(camera_positions)
             R_prev = R_global
             t_prev = t_global
 
@@ -89,7 +93,7 @@ class Sequence:
 
 if __name__ == "__main__":
 
-    sequence = Sequence('./Reference_Render_Translation')
+    sequence = Sequence('./Reference_Render_cubes')
     print(sequence.image_names)
 
     # Retrieved from photo metadata for iPhone 13
@@ -111,6 +115,6 @@ if __name__ == "__main__":
     #eightP = EightPoint()
     eightP = EightPoint()
 
-    sequence.computeCameraMovement(K, eightP.getRotationTranslationFromImagesRANSAC)
+    sequence.computeCameraMovement(K, eightP.getRotationTranslationFromImagesOpenCV, iterative=True)
     
 
