@@ -356,8 +356,9 @@ class EightPoint:
 
         # Disambiguate rotation and translation
         R, t = self.__disambiguateTransform(R1, R2, t1, t2, pts1, pts2, K)
-
-        return R,t
+        
+        scaling_factor = np.linalg.norm(np.median(pts1-pts2, axis=0))
+        return R,t,scaling_factor
     
         # Function to compute camera rotation and translation from two images
     def getRotationTranslationFromImagesRANSAC(self,im1_gray, im2_gray, K):
@@ -379,7 +380,8 @@ class EightPoint:
         # Disambiguate rotation and translation
         R, t = self.__disambiguateTransform(R1, R2, t1, t2, pts1, pts2, K)
 
-        return R,t
+        scaling_factor = np.linalg.norm(np.median(pts1-pts2, axis=0))
+        return R,t,scaling_factor
     
     # This function implements end to end camera pose estimation using OpenCV functions
     def getRotationTranslationFromImagesOpenCV(self, im1, im2, K):
@@ -399,6 +401,9 @@ class EightPoint:
             pts2 = np.float32([keypoints2[m.trainIdx].pt for m in good_matches])
 
             E_CV, mask = cv2.findEssentialMat(pts1, pts2, K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
+            # Apply the mask to the points
+            pts1 = pts1[mask.ravel() == 1]
+            pts2 = pts2[mask.ravel() == 1]
             # R1, R2, t1, t2 = self.__getCandidateTransform(E_CV)
             # R_CV, t_CV = self.__disambiguateTransform(R1, R2, t1, t2, pts1, pts2, K)
             _, R_CV, t_CV, mask = cv2.recoverPose(E_CV, pts1, pts2, K)
@@ -406,8 +411,8 @@ class EightPoint:
             print("Not enough matches are found - {}/{}".format(len(good_matches), MIN_MATCH_COUNT))
             R_CV = np.eye(3)
             t_CV = np.zeros(3)
-        
-        return R_CV,t_CV.flatten()
+        scaling_factor = np.linalg.norm(np.median(pts1-pts2, axis=0))
+        return R_CV,t_CV.flatten(), scaling_factor
 
 # Display the movement of the camera in 3D space from an array of translation matrices
 def plotCameraMovement(t_list):
@@ -539,7 +544,7 @@ if __name__ == "__main__":
     # Test - Recover rotation and translation
 
     R,t = eightP.getRotationTranslationFromEK(E,K)
-    R,t = eightP.getRotationTranslationFromImages(im1_gray, im2_gray, K)
+    R,t,_ = eightP.getRotationTranslationFromImages(im1_gray, im2_gray, K)
     _, R_CV, t_CV, mask = cv2.recoverPose(E, pts1, pts2, K)
 
     print("Rotation matrix from our implementation:")
