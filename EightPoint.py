@@ -414,8 +414,9 @@ class EightPoint:
         scaling_factor = np.linalg.norm(np.median(pts1-pts2, axis=0))
         return R_CV,t_CV.flatten(), scaling_factor
 
-# Display the movement of the camera in 3D space from an array of translation matrices
-def plotCameraMovement(t_list):
+# Display the movement of the camera in 3D space from an array of translation matrices. 
+# Use sequence object instead
+def DEPRECATEDplotCameraMovement(t_list):
     # Enable interactive mode
     # Create a 3D plot
     fig = plt.figure()
