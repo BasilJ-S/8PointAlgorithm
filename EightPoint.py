@@ -11,13 +11,13 @@ class EightPoint:
     #-----------------Find SIFT Keypoints and Match with RANSAC-----------------#
 
     # Detect SIFT keypoints in a greyscale image
-    def __getSIFT(self,image_gray):
+    def __DEPRACATEDgetSIFT(self,image_gray):
         sift = cv2.SIFT_create()
         keypoints, descriptors = sift.detectAndCompute(image_gray, None)
         return keypoints, descriptors
 
     # Find good matches between two sets of descriptors
-    def __getMatches(self,des1, des2):
+    def __DEPRECATEDgetMatches(self,des1, des2):
         bf = cv2.BFMatcher()
         matches = bf.knnMatch(des1, des2, k=2)
         good_matches = []
@@ -27,7 +27,7 @@ class EightPoint:
         return good_matches
 
     # Find homography between two images given the keypoints
-    def __getInliers(self,kp1, kp2, good_matches):
+    def __DEPRECATEDgetInliers(self,kp1, kp2, good_matches):
         if len(good_matches) > MIN_MATCH_COUNT:
             src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
             dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
@@ -43,16 +43,16 @@ class EightPoint:
         return inlier_pts1, inlier_pts2
     
     # Function to find inlier matching points between two images
-    def getMatchingInliers(self,im1_gray, im2_gray):
+    def DEPRACATEDgetMatchingInliers(self,im1_gray, im2_gray):
         # Find the SIFT key points and descriptors in the two images
-        kp1, des1 = self.__getSIFT(im1_gray)
-        kp2, des2 = self.__getSIFT(im2_gray)
+        kp1, des1 = self.__DEPRACATEDgetSIFT(im1_gray)
+        kp2, des2 = self.__DEPRACATEDgetSIFT(im2_gray)
 
         # Match keypoints
-        good = self.__getMatches(des1, des2)
+        good = self.__DEPRECATEDgetMatches(des1, des2)
 
         # Find homography and draw matches
-        inlier_pts1, inlier_pts2 = self.__getInliers(kp1, kp2, good)
+        inlier_pts1, inlier_pts2 = self.__DEPRECATEDgetInliers(kp1, kp2, good)
 
         return inlier_pts1, inlier_pts2
 
@@ -96,7 +96,7 @@ class EightPoint:
     #-----------------Compute Fundamental Matrix-----------------#
 
     # Compute fundamental matrix from inlier matches of two images
-    def getFundamental(self,pts1, pts2):
+    def DEPRECATEDgetFundamental(self,pts1, pts2):
 
         # Normalize points
         pts1_mean = np.mean(pts1, axis=0)
@@ -338,15 +338,15 @@ class EightPoint:
         return R,t
 
     # Function to compute camera rotation and translation from two images
-    def getRotationTranslationFromImages(self,im1_gray, im2_gray, K):
+    def DEPRECATEDgetRotationTranslationFromImages(self,im1_gray, im2_gray, K):
         # Find inlier matching points
-        pts1, pts2 = self.getMatchingInliers(im1_gray, im2_gray)
+        pts1, pts2 = self.DEPRACATEDgetMatchingInliers(im1_gray, im2_gray)
 
         # Plot the inlier matching points
         #self.plotMatches(im1_gray, im2_gray, pts1, pts2)
 
         # Compute fundamental matrix
-        F = self.getFundamental(pts1, pts2)
+        F = self.DEPRECATEDgetFundamental(pts1, pts2)
 
         # Compute essential matrix
         E = self.getEssential(F, K)
@@ -544,7 +544,7 @@ if __name__ == "__main__":
     # Test - Recover rotation and translation
 
     R,t = eightP.getRotationTranslationFromEK(E,K)
-    R,t,_ = eightP.getRotationTranslationFromImages(im1_gray, im2_gray, K)
+    R,t,_ = eightP.DEPRECATEDgetRotationTranslationFromImages(im1_gray, im2_gray, K)
     _, R_CV, t_CV, mask = cv2.recoverPose(E, pts1, pts2, K)
 
     print("Rotation matrix from our implementation:")
