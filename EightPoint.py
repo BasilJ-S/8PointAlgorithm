@@ -10,52 +10,6 @@ class EightPoint:
         pass
     #-----------------Find SIFT Keypoints and Match with RANSAC-----------------#
 
-    # Detect SIFT keypoints in a greyscale image
-    def __DEPRACATEDgetSIFT(self,image_gray):
-        sift = cv2.SIFT_create()
-        keypoints, descriptors = sift.detectAndCompute(image_gray, None)
-        return keypoints, descriptors
-
-    # Find good matches between two sets of descriptors
-    def __DEPRECATEDgetMatches(self,des1, des2):
-        bf = cv2.BFMatcher()
-        matches = bf.knnMatch(des1, des2, k=2)
-        good_matches = []
-        for m, n in matches:
-            if m.distance < 0.75 * n.distance:
-                good_matches.append(m)
-        return good_matches
-
-    # Find homography between two images given the keypoints
-    def __DEPRECATEDgetInliers(self,kp1, kp2, good_matches):
-        if len(good_matches) > MIN_MATCH_COUNT:
-            src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-            M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-            matchesMask = mask.ravel().tolist()
-        else:
-            print("Not enough matches are found - {}/{}".format(len(good_matches), MIN_MATCH_COUNT))
-            matchesMask = None
-        
-        inlier_pts1 = np.float32([kp1[m.queryIdx].pt for i, m in enumerate(good_matches) if matchesMask[i]])
-        inlier_pts2 = np.float32([kp2[m.trainIdx].pt for i, m in enumerate(good_matches) if matchesMask[i]])
-        
-        return inlier_pts1, inlier_pts2
-    
-    # Function to find inlier matching points between two images
-    def DEPRACATEDgetMatchingInliers(self,im1_gray, im2_gray):
-        # Find the SIFT key points and descriptors in the two images
-        kp1, des1 = self.__DEPRACATEDgetSIFT(im1_gray)
-        kp2, des2 = self.__DEPRACATEDgetSIFT(im2_gray)
-
-        # Match keypoints
-        good = self.__DEPRECATEDgetMatches(des1, des2)
-
-        # Find homography and draw matches
-        inlier_pts1, inlier_pts2 = self.__DEPRECATEDgetInliers(kp1, kp2, good)
-
-        return inlier_pts1, inlier_pts2
-
     # Function to find the matching points between two images using OpenCV functions
     def getMatchingPointsOpenCV(self,im1, im2):
         sift = cv2.SIFT_create()
@@ -95,48 +49,6 @@ class EightPoint:
 
     #-----------------Compute Fundamental Matrix-----------------#
 
-    # Compute fundamental matrix from inlier matches of two images
-    def DEPRECATEDgetFundamental(self,pts1, pts2):
-
-        # Normalize points
-        pts1_mean = np.mean(pts1, axis=0)
-        pts2_mean = np.mean(pts2, axis=0)
-        pts1_std = np.std(pts1, axis=0)
-        pts2_std = np.std(pts2, axis=0)
-
-        T1 = np.array([[1/pts1_std[0], 0, -pts1_mean[0]/pts1_std[0]],
-                    [0, 1/pts1_std[1], -pts1_mean[1]/pts1_std[1]],
-                    [0, 0, 1]])
-
-        T2 = np.array([[1/pts2_std[0], 0, -pts2_mean[0]/pts2_std[0]],
-                    [0, 1/pts2_std[1], -pts2_mean[1]/pts2_std[1]],
-                    [0, 0, 1]])
-
-        pts1_normalized = T1 @ np.vstack((pts1.T, np.ones((1, pts1.shape[0]))))
-        pts2_normalized = T2 @ np.vstack((pts2.T, np.ones((1, pts2.shape[0]))))
-
-        # Construct matrix A for the normalized points
-        A = np.zeros((len(pts1), 9))
-        for i in range(len(pts1)):
-            x1, y1 = pts1_normalized[0, i], pts1_normalized[1, i]
-            x2, y2 = pts2_normalized[0, i], pts2_normalized[1, i]
-            A[i] = [x1*x2, y1*x2, x2, x1*y2, y1*y2, y2, x1, y1, 1]
-
-        # Compute the fundamental matrix using SVD
-        U, S, Vt = np.linalg.svd(A)
-        F_normalized = Vt[-1].reshape(3, 3)
-
-        # Enforce rank-2 constraint on F
-        U, S, Vt = np.linalg.svd(F_normalized)
-        S[2] = 0
-        F_normalized = U @ np.diag(S) @ Vt
-
-        # Denormalize the fundamental matrix
-        F = T2.T @ F_normalized @ T1
-        return F
-
-        # Use RANSAC to find the fundamental matrix between two images, taking in all matches as input (NOT INLIER MATCHES)
-    
     # Get normalizing matrix for a set of points
     def __getNormalizingMatrix(self,pts):
         # Normalize points
@@ -221,8 +133,6 @@ class EightPoint:
                     print(f"Best number of inliers: {bestInliers}, outliers: {len(pts1) - bestInliers}")
                     bestF = F
         return bestF
-
-
     
     #-----------------Recover Essential Matrix-----------------#
 
@@ -337,30 +247,6 @@ class EightPoint:
         R,t = self.__disambiguateTransform(R1, R2, t1, t2, pts1, pts2, K)
         return R,t
 
-    # Function to compute camera rotation and translation from two images
-    def DEPRECATEDgetRotationTranslationFromImages(self,im1_gray, im2_gray, K):
-        # Find inlier matching points
-        pts1, pts2 = self.DEPRACATEDgetMatchingInliers(im1_gray, im2_gray)
-
-        # Plot the inlier matching points
-        #self.plotMatches(im1_gray, im2_gray, pts1, pts2)
-
-        # Compute fundamental matrix
-        F = self.DEPRECATEDgetFundamental(pts1, pts2)
-
-        # Compute essential matrix
-        E = self.getEssential(F, K)
-
-        # Recover rotation and translation
-        R1, R2, t1, t2 = self.__getCandidateTransform(E)
-
-        # Disambiguate rotation and translation
-        R, t = self.__disambiguateTransform(R1, R2, t1, t2, pts1, pts2, K)
-        
-        scaling_factor = np.linalg.norm(np.median(pts1-pts2, axis=0))
-        return R,t,scaling_factor
-    
-        # Function to compute camera rotation and translation from two images
     def getRotationTranslationFromImagesRANSAC(self,im1_gray, im2_gray, K):
         # Find inlier matching points
         pts1, pts2 = self.getMatchingPointsOpenCV(im1_gray, im2_gray)
@@ -414,34 +300,6 @@ class EightPoint:
         scaling_factor = np.linalg.norm(np.median(pts1-pts2, axis=0))
         return R_CV,t_CV.flatten(), scaling_factor
 
-# Display the movement of the camera in 3D space from an array of translation matrices. 
-# Use sequence object instead
-def DEPRECATEDplotCameraMovement(t_list):
-    # Enable interactive mode
-    # Create a 3D plot
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    # Plot the origin
-    ax.scatter(0, 0, 0, color='r')
-    ax.text(0, 0, 0, "Camera 1")
-
-    # Initialize the current displacement
-    current_displacement = np.zeros(3)
-
-    # Plot the camera positions
-    for i, t in enumerate(t_list):
-        current_displacement += np.array(t, dtype=np.float64)
-        ax.scatter(current_displacement[0], current_displacement[1], current_displacement[2], color='b')
-        ax.text(current_displacement[0], current_displacement[1], current_displacement[2], f"Camera {i+2}")
-
-    # Set the axes limits
-    ax.set_xlim([-2, 2])
-    ax.set_ylim([-2, 2])
-    ax.set_zlim([-2, 2])
-
-    # Show the plot
-    plt.show()
 
 #-----------------Main Code-----------------#
 if __name__ == "__main__":
