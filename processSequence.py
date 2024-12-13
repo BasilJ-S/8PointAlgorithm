@@ -58,7 +58,8 @@ class Sequence:
         # Plot the 3D positions
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        ax.plot(camera_positions[:, 0], camera_positions[:, 1], camera_positions[:, 2], marker='o', linestyle='-', color='r')  
+        ax.plot(camera_positions[:, 0], camera_positions[:, 1], camera_positions[:, 2], marker='o', linestyle='None', color='r')
+          
         colors = plt.cm.viridis(np.linspace(0, 1, len(camera_positions)))
 
         for i, (x, y, z) in enumerate(camera_positions):
@@ -123,6 +124,6 @@ if __name__ == "__main__":
     #0, 0, 1] ])
     eightP = EightPoint()
 
-    sequence.computeCameraMovement(K, eightP.getRotationTranslationFromImagesOpenCV, iterative=False)
+    sequence.computeCameraMovement(K, eightP.getRotationTranslationFromImagesRANSAC, iterative=False)
     
 
