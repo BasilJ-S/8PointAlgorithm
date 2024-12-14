@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from collections.abc import Callable
 from tqdm import tqdm
+import pandas as pd
 
 class Sequence:
     def __init__(self, directory):
@@ -22,9 +23,11 @@ class Sequence:
     # If iterative is False, the method calculates the camera relative to the first image
     def computeCameraMovement(self, K, method: Callable, iterative=True):
         # Initialize with the first camera position at the origin
-        camera_positions = [np.zeros((3))]  
+        camera_positions = [np.zeros((3))]
+        camera_rotations = [np.eye(3)]
         R_prev = np.eye(3)
         t_prev = np.zeros((1, 3))
+        transformation = np.array([0, 0, 0, 0, 0, 0, 0])
 
 
         for i in tqdm(range(len(self.images) - 1)):
@@ -43,6 +46,10 @@ class Sequence:
                 print("Scaled t:", t_global)
                 
             camera_positions = np.append(camera_positions, [t_global.flatten()], axis=0)  # Update previous pose
+            camera_rotations = np.append(camera_rotations, [R_global], axis=0) 
+            transformation = np.vstack([transformation, np.hstack([i+1, t_global.flatten(), self.rotationMatrixToEulerAngles(R_global)])])
+            print(np.hstack([i+1, t_global.flatten(), self.rotationMatrixToEulerAngles(R_global)]))
+            print([t_global.flatten()])
             #print(camera_positions)
             R_prev = R_global
             t_prev = t_global
@@ -59,7 +66,12 @@ class Sequence:
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
         ax.plot(camera_positions[:, 0], camera_positions[:, 1], camera_positions[:, 2], marker='o', linestyle='None', color='r')
-          
+        # plot the rotations as a unit vector rotation of (0,0,1)
+        for i in range(len(camera_rotations)):
+            z = np.array([0, 0, 1])
+            z = camera_rotations[i]@z
+            ax.quiver(camera_positions[i, 0], camera_positions[i, 1], camera_positions[i, 2], z[0], z[1], z[2], length=10, color='b')
+
         colors = plt.cm.viridis(np.linspace(0, 1, len(camera_positions)))
 
         for i, (x, y, z) in enumerate(camera_positions):
@@ -83,6 +95,27 @@ class Sequence:
         ax.set_zlim(mid_z - max_range / 2, mid_z + max_range / 2)
 
         plt.show()
+        print(transformation)
+        transformation_df = pd.DataFrame(transformation, columns=['frame', 'x', 'y', 'z', 'x_rot', 'y_rot', 'z_rot'])
+        transformation_df.to_csv('transformation.csv', index=False)
+
+
+    def rotationMatrixToEulerAngles(self,R) :
+        sy = np.sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
+
+        singular = sy < 1e-6
+
+        if  not singular :
+            x = np.arctan2(R[2,1] , R[2,2])
+            y = np.arctan2(-R[2,0], sy)
+            z = np.arctan2(R[1,0], R[0,0])
+        else :
+            x = np.arctan2(-R[1,2], R[1,1])
+            y = np.arctan2(-R[2,0], sy)
+            z = 0
+
+        return np.array([x, y, z])
+        
 
 
     # This function returns a list of the names of all files in the Reference_Render_cubes folder
@@ -106,24 +139,10 @@ if __name__ == "__main__":
 
     sequence = Sequence('./Reference_Render_Translation')
 
-    # Retrieved from photo metadata for iPhone 13
-    focal = 5.1
-    pixPerMm = 2.835
-    fm = focal * pixPerMm
-
-    # Assume center of image is the principal point
-    cx = sequence.images[0].shape[1] / 2
-    cy = sequence.images[0].shape[0] / 2
-
-    # Intrinsic matrix
-    K = np.array([[fm, 0, cx],
-                [0, fm, cy],
-                [0, 0, 1]])
-
-    #K = np.array([[2666.666666666, 0, 960],[0, 2666.666666666, 540],[
-    #0, 0, 1] ])
+    K = np.array([[2666.666666666, 0, 960],[0, 2666.666666666, 540],[
+    0, 0, 1] ])
     eightP = EightPoint()
 
-    sequence.computeCameraMovement(K, eightP.getRotationTranslationFromImagesRANSAC, iterative=False)
+    sequence.computeCameraMovement(K, eightP.getRotationTranslationFromImagesOpenCV, iterative=False)
     
 
