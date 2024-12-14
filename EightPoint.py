@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-from helper import apply_matrix, calculate_dist
+
 
 MIN_MATCH_COUNT = 8
 
@@ -46,22 +46,6 @@ class EightPoint:
         plt.show()
 
     #-----------------Compute Fundamental Matrix-----------------#
-
-    def apply_matrix(pts, F):
-        ''' 
-        apply matrix F to the input points, first converting to homogenous
-        Params:
-        pts: (Nxm) matrix of points
-        F: (m+1 x m+1) matrix (could be fundmental)
-        '''  
-        # Convert to homgenous coords  
-        pts_hom = np.hstack((pts, np.ones((pts.shape[0], 1)))) # (N x m)
-
-        # Transform by matrix F
-        transformed_pts = (F @ pts_hom.T).T  # (N x m)
-
-        # Divide by homogenous scaling
-        return transformed_pts[:, 0:pts.shape[1]] / transformed_pts[:, pts.shape[1]][:, None]
 
     # Get normalizing matrix for a set of points
     def __getNormalizingMatrix(self,pts):
@@ -120,36 +104,33 @@ class EightPoint:
         concensusSetMinSize = 9
         concensusMaxError = 1
         inlierMaxError = 0.1
-
-        if not (len(pts1) == len(pts2) and len(pts1) >=8):
-            raise Exception("Not enough points for ransac")
-
         for i in range(100):   
             # Randomly select 8 points
-
-            idx = np.random.choice(len(pts1), 8, replace=False)
-            pts1_sample = pts1[idx]
-            pts2_sample = pts2[idx]
+            try:
+                idx = np.random.choice(len(pts1), 8, replace=False)
+                pts1_sample = pts1[idx]
+                pts2_sample = pts2[idx]
+            except:
+                continue
 
             # Compute the fundamental matrix using least squares
-            F_consensus = self.getFundementalLS(pts1_sample, pts2_sample, eightPoints=True)
+            F = self.getFundementalLS(pts1_sample, pts2_sample, eightPoints=True)
 
             # Compute the epipolar constraint error
-            pts1_transformed = apply_matrix(pts1, F_consensus)
-            error = calculate_dist(pts1_transformed, pts2)
+            pts1_hom = np.hstack((pts1, np.ones((pts1.shape[0], 1))))
+            pts2_hom = np.hstack((pts2, np.ones((pts2.shape[0], 1))))
+            error = np.abs(np.sum(pts2_hom * (F @ pts1_hom.T).T, axis=1))
 
-            consensus_set_indices = error < concensusMaxError
             # Count the number of inliers
             inliers = np.sum(error < concensusMaxError)
             if inliers > concensusSetMinSize:
-                # Recalculate F from all points in the consensus set
-                F_consensus = self.getFundementalLS(pts1[consensus_set_indices, :], pts2[consensus_set_indices, :])
+                F = self.getFundementalLS(pts1[error < 1], pts2[error < 1])
+                error = np.abs(np.sum(pts2_hom * (F @ pts1_hom.T).T, axis=1))
                 inliers = np.sum(error < inlierMaxError)
                 if inliers > bestInliers:
                     bestInliers = inliers
                     bestConcensusSet = np.where(error < inlierMaxError)
                     print(f"Best number of inliers: {bestInliers}, outliers: {len(pts1) - bestInliers}")
-
                     bestF = F
 
         return bestF, bestConcensusSet
