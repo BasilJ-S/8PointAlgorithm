@@ -48,23 +48,6 @@ class EightPoint:
         plt.show()
 
     #-----------------Compute Fundamental Matrix-----------------#
-
-    def apply_matrix(pts, F):
-        ''' 
-        apply matrix F to the input points, first converting to homogenous
-        Params:
-        pts: (Nxm) matrix of points
-        F: (m+1 x m+1) matrix (could be fundmental)
-        '''  
-        # Convert to homgenous coords  
-        pts_hom = np.hstack((pts, np.ones((pts.shape[0], 1)))) # (N x m)
-
-        # Transform by matrix F
-        transformed_pts = (F @ pts_hom.T).T  # (N x m)
-
-        # Divide by homogenous scaling
-        return transformed_pts[:, 0:pts.shape[1]] / transformed_pts[:, pts.shape[1]][:, None]
-
     # Get normalizing matrix for a set of points
     def __getNormalizingMatrix(self,pts):
         # Normalize points
