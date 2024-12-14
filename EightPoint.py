@@ -12,19 +12,17 @@ class EightPoint:
 
     # Function to find the matching points between two images using OpenCV functions
     def getMatchingPointsOpenCV(self,im1, im2):
-        sift = cv2.SIFT_create()
-        keypoints1, descriptors1 = sift.detectAndCompute(im1, None)
-        keypoints2, descriptors2 = sift.detectAndCompute(im2, None)
+        detector = cv2.ORB_create(500)
+        keypoints1, descriptors1 = detector.detectAndCompute(im1, None)
+        keypoints2, descriptors2 = detector.detectAndCompute(im2, None)
 
         bf = cv2.BFMatcher()
-        matches = bf.knnMatch(descriptors1, descriptors2, k=2)
+        matches = bf.match(descriptors1, descriptors2)
         good_matches = []
-        for m, n in matches:
-            if m.distance < 0.75 * n.distance:
-                good_matches.append(m)
+        
 
-        pts1 = np.float32([keypoints1[m.queryIdx].pt for m in good_matches])
-        pts2 = np.float32([keypoints2[m.trainIdx].pt for m in good_matches])
+        pts1 = np.float32([keypoints1[m.queryIdx].pt for m in matches])
+        pts2 = np.float32([keypoints2[m.trainIdx].pt for m in matches])
         
         return pts1, pts2
 
@@ -118,6 +116,7 @@ class EightPoint:
     def getFundamentalRANSAC(self,pts1,pts2):
         bestF = np.eye(3)
         bestInliers = 0
+        bestConcensusSet = []
         concensusSetMinSize = 9
         concensusMaxError = 1
         inlierMaxError = 0.1
@@ -148,9 +147,12 @@ class EightPoint:
                 inliers = np.sum(error < inlierMaxError)
                 if inliers > bestInliers:
                     bestInliers = inliers
+                    bestConcensusSet = np.where(error < inlierMaxError)
                     print(f"Best number of inliers: {bestInliers}, outliers: {len(pts1) - bestInliers}")
-                    bestF = F_consensus
-        return bestF
+
+                    bestF = F
+
+        return bestF, bestConcensusSet
     
     #-----------------Recover Essential Matrix-----------------#
 
@@ -273,7 +275,7 @@ class EightPoint:
         #self.plotMatches(im1_gray, im2_gray, pts1, pts2)
 
         # Compute fundamental matrix
-        F = self.getFundamentalRANSAC(pts1, pts2)
+        F, concensusSet = self.getFundamentalRANSAC(pts1, pts2)
 
         # Compute essential matrix
         E = self.getEssential(F, K)
@@ -349,7 +351,7 @@ if __name__ == "__main__":
     pts1, pts2 = eightP.getMatchingPointsOpenCV(im3_gray, im2_gray)
     # -----------FUNDAMENTAL MATRIX ESTIMATION----------------
     # TEST - CHECK THAT FUNDAMENTAL MATRIX CALCULATION IS CORRECT
-    F = eightP.getFundamentalRANSAC(pts1, pts2)
+    F, _ = eightP.getFundamentalRANSAC(pts1, pts2)
 
     F_CV, mask = cv2.findFundamentalMat(pts1, pts2, cv2.FM_RANSAC, 1.0, 0.99)
     print("Fundamental matrix from our implementation:")
