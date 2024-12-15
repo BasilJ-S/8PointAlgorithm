@@ -93,7 +93,7 @@ class EightPoint:
         # Denormalize the fundamental matrix
         F = M2.T @ Fnormalized @ M1
         # Normalize the fundamental matrix
-        F = F/F[2,2]
+        F = F/np.linalg.norm(F)
         return F
     
     # Use RANSAC to find the fundamental matrix between two images, taking in all matches as input (NOT INLIER MATCHES)
@@ -104,7 +104,7 @@ class EightPoint:
         concensusSetMinSize = 9
         concensusMaxError = 1
         inlierMaxError = 0.1
-        for i in range(100):   
+        for i in range(10000):   
             # Randomly select 8 points
             try:
                 idx = np.random.choice(len(pts1), 8, replace=False)
@@ -124,16 +124,16 @@ class EightPoint:
             # Count the number of inliers
             inliers = np.sum(error < concensusMaxError)
             if inliers > concensusSetMinSize:
-                F = self.getFundementalLS(pts1[error < 1], pts2[error < 1])
+                F = self.getFundementalLS(pts1[error < concensusMaxError], pts2[error < concensusMaxError])
                 error = np.abs(np.sum(pts2_hom * (F @ pts1_hom.T).T, axis=1))
                 inliers = np.sum(error < inlierMaxError)
                 if inliers > bestInliers:
                     bestInliers = inliers
-                    bestConcensusSet = np.where(error < inlierMaxError)
+                    bestConcensusSet = (error < inlierMaxError)
                     print(f"Best number of inliers: {bestInliers}, outliers: {len(pts1) - bestInliers}")
                     bestF = F
 
-        return bestF, bestConcensusSet
+        return bestF, bestConcensusSet.astype(int)
     
     #-----------------Recover Essential Matrix-----------------#
 
