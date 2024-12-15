@@ -19,8 +19,8 @@ filename_stem = Path(filepath).stem
 csv_filename = f"{filename_stem}_{ob.name}_loc_and_rot.csv"
 
 output_csv_file = os.path.join(directory , csv_filename)
-
-header_columns = ['frame','x', 'y' 'z', 'x_rot', 'y_rot', 'z_rot']
+print(output_csv_file)
+header_columns = ['frame','x', 'y', 'z', 'x_rot', 'y_rot', 'z_rot']
 
 
 
