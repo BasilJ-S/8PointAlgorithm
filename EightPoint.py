@@ -12,7 +12,7 @@ class EightPoint:
 
     # Function to find the matching points between two images using OpenCV functions
     def getMatchingPointsOpenCV(self,im1, im2):
-        detector = cv2.ORB_create(500)
+        detector = cv2.ORB_create(1000)
         keypoints1, descriptors1 = detector.detectAndCompute(im1, None)
         keypoints2, descriptors2 = detector.detectAndCompute(im2, None)
 
@@ -62,9 +62,6 @@ class EightPoint:
 
     # Get the fundamental matrix using a least squares approach. If eightPoints is set to True, only 8 points are used
     def getFundementalLS(self,pts1, pts2, eightPoints = False):
-        if eightPoints and (len(pts1) != 8 or len(pts2) != 8):
-            print("Error: Only 8 points are allowed for the 8-point algorithm")
-            return
 
         M1 = self.__getNormalizingMatrix(pts1)
         M2 = self.__getNormalizingMatrix(pts2)
@@ -74,13 +71,18 @@ class EightPoint:
 
         # Construct matrix A for the normalized points
         A = np.zeros((max(len(pts1), 9), 9))
-        for i in range(len(pts1)):
+        #If 8point, only look at first 8 points, otherwise look at all points
+        if (eightPoints):
+            length = 8
+        else:
+            length = len(pts1)
+
+        for i in range(length):
             x1, y1 = pts1Normalized[0, i], pts1Normalized[1, i]
             x2, y2 = pts2Normalized[0, i], pts2Normalized[1, i]
             A[i] = [x1*x2, y1*x2, x2, x1*y2, y1*y2, y2, x1, y1, 1]
         if eightPoints:
             A[8] = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-
         # Compute the fundamental matrix using SVD
         U, S, Vt = np.linalg.svd(A)
         Fnormalized = Vt[-1].reshape(3, 3)
@@ -94,6 +96,7 @@ class EightPoint:
         F = M2.T @ Fnormalized @ M1
         # Normalize the fundamental matrix
         F = F/F[2,2]
+        print("NORM", np.linalg.norm(F))
         return F
     
     # Use RANSAC to find the fundamental matrix between two images, taking in all matches as input (NOT INLIER MATCHES)
@@ -101,8 +104,8 @@ class EightPoint:
         bestF = np.eye(3)
         bestInliers = 0
         bestConcensusSet = []
-        concensusSetMinSize = 9
-        concensusMaxError = 1
+        concensusSetMinSize = 40
+        concensusMaxError = 0.5
         inlierMaxError = 0.1
         for i in range(100):   
             # Randomly select 8 points
@@ -124,7 +127,7 @@ class EightPoint:
             # Count the number of inliers
             inliers = np.sum(error < concensusMaxError)
             if inliers > concensusSetMinSize:
-                F = self.getFundementalLS(pts1[error < 1], pts2[error < 1])
+                F = self.getFundementalLS(pts1[error < concensusMaxError], pts2[error < concensusMaxError])
                 error = np.abs(np.sum(pts2_hom * (F @ pts1_hom.T).T, axis=1))
                 inliers = np.sum(error < inlierMaxError)
                 if inliers > bestInliers:
@@ -270,6 +273,51 @@ class EightPoint:
         scaling_factor = np.linalg.norm(np.median(pts1-pts2, axis=0))
         return R,t,scaling_factor
     
+    def getRotationTranslationFromImagesLS(self,im1_gray, im2_gray, K):
+        # Find inlier matching points
+        pts1, pts2 = self.getMatchingPointsOpenCV(im1_gray, im2_gray)
+
+        # Plot the inlier matching points
+        #self.plotMatches(im1_gray, im2_gray, pts1, pts2)
+
+        # Compute fundamental matrix
+        F = self.getFundementalLS(pts1, pts2)
+
+        # Compute essential matrix
+        E = self.getEssential(F, K)
+
+        # Recover rotation and translation
+        R1, R2, t1, t2 = self.__getCandidateTransform(E)
+
+        # Disambiguate rotation and translation
+        R, t = self.__disambiguateTransform(R1, R2, t1, t2, pts1, pts2, K)
+
+        scaling_factor = np.linalg.norm(np.median(pts1-pts2, axis=0))
+        return R,t,scaling_factor
+    
+    def getRotationTranslationFromImages8Point(self,im1_gray, im2_gray, K):
+        # Find inlier matching points
+        pts1, pts2 = self.getMatchingPointsOpenCV(im1_gray, im2_gray)
+
+        # Plot the inlier matching points
+        #self.plotMatches(im1_gray, im2_gray, pts1, pts2)
+
+        # Compute fundamental matrix
+        F = self.getFundementalLS(pts1, pts2, eightPoints=True)
+
+        # Compute essential matrix
+        E = self.getEssential(F, K)
+
+        # Recover rotation and translation
+        R1, R2, t1, t2 = self.__getCandidateTransform(E)
+
+        # Disambiguate rotation and translation
+        R, t = self.__disambiguateTransform(R1, R2, t1, t2, pts1, pts2, K)
+
+        scaling_factor = np.linalg.norm(np.median(pts1-pts2, axis=0))
+        return R,t,scaling_factor
+    
+
     # This function implements end to end camera pose estimation using OpenCV functions
     def getRotationTranslationFromImagesOpenCV(self, im1, im2, K):
 
