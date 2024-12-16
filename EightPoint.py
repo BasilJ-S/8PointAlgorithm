@@ -17,13 +17,14 @@ class EightPoint:
         keypoints2, descriptors2 = detector.detectAndCompute(im2, None)
 
         bf = cv2.BFMatcher()
-        matches = bf.match(descriptors1, descriptors2)
+        matches = bf.knnMatch(descriptors1, descriptors2, k=2)
         good_matches = []
-        
+        for m, n in matches:
+            if m.distance < 0.80 * n.distance:
+                good_matches.append(m)
 
-        pts1 = np.float32([keypoints1[m.queryIdx].pt for m in matches])
-        pts2 = np.float32([keypoints2[m.trainIdx].pt for m in matches])
-        
+        pts1 = np.float32([keypoints1[m.queryIdx].pt for m in good_matches])
+        pts2 = np.float32([keypoints2[m.trainIdx].pt for m in good_matches])
         return pts1, pts2
 
     # Plot two images side by side with matches shown
@@ -107,7 +108,7 @@ class EightPoint:
         concensusSetMinSize = 40
         concensusMaxError = 0.5
         inlierMaxError = 0.1
-        for i in range(100):   
+        for i in range(1000):   
             # Randomly select 8 points
             try:
                 idx = np.random.choice(len(pts1), 8, replace=False)
