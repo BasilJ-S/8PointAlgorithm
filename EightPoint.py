@@ -12,7 +12,7 @@ class EightPoint:
 
     # Function to find the matching points between two images using OpenCV functions
     def getMatchingPointsOpenCV(self,im1, im2):
-        detector = cv2.ORB_create(1000)
+        detector = cv2.ORB_create(3000)
         keypoints1, descriptors1 = detector.detectAndCompute(im1, None)
         keypoints2, descriptors2 = detector.detectAndCompute(im2, None)
 
@@ -106,9 +106,9 @@ class EightPoint:
         bestInliers = 0
         bestConcensusSet = []
         concensusSetMinSize = 40
-        concensusMaxError = 0.5
-        inlierMaxError = 0.1
-        for i in range(1000):   
+        concensusMaxError = 1
+        inlierMaxError = 1
+        for i in range(300):   
             # Randomly select 8 points
             try:
                 idx = np.random.choice(len(pts1), 8, replace=False)
@@ -261,6 +261,8 @@ class EightPoint:
 
         # Compute fundamental matrix
         F, concensusSet = self.getFundamentalRANSAC(pts1, pts2)
+
+        F = F / np.linalg.norm(F)
 
         # Compute essential matrix
         E = self.getEssential(F, K)
