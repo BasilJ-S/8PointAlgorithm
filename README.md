@@ -20,17 +20,20 @@ This project implements multiple methods for camera pose estimation from a seque
 
 ## Visual Results
 
+### Input Images
+
+Image before camera translation:
+
+![Before Translation](images/figure_1.png)
+
+Image after camera translation:
+
+![After Translation](images/figure_2.png)
+
 ### Feature Matching
-Corresponding features detected between image pairs using SIFT descriptors:
+Corresponding features detected and matched between the two images using SIFT descriptors:
 
-![Feature Matching](images/figure_1.png)
-
-### Camera Trajectory
-3D visualization of estimated camera positions from image sequence:
-
-![Camera Trajectory](images/figure_2.png)
-
-![Camera Trajectory 2](images/figure_3.png)
+![Feature Matching](images/figure_3.png)
 
 ## Implementation Details
 
@@ -76,10 +79,12 @@ R, t, scale = eight_point.getRotationTranslationFromImagesRANSAC(img1, img2, K)
 
 ## Dependencies
 
-- OpenCV (cv2)
-- NumPy
-- Matplotlib
-- tqdm (for progress bars)
+See `requirements.txt` for the full list of dependencies. The requirements file is auto-generated and contains the core packages used by this project.
+
+Install dependencies with:
+```bash
+pip install -r requirements.txt
+```
 
 ## Results
 
