@@ -9,7 +9,8 @@ __pycache__/
 # Images
 *.jpeg
 *.jpg
-*.png  
+*.png
+!images/*.png
 *.zip
 
 # Distribution / packaging
